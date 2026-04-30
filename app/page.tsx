@@ -1,0 +1,583 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Brain,
+  ClipboardCheck,
+  Mic,
+  PauseCircle,
+  FileSearch,
+  Gauge,
+  MessageSquareText,
+  PlayCircle,
+  Square,
+  Settings,
+  ShieldQuestion,
+  Sparkles,
+  Upload,
+  Users
+} from "lucide-react";
+import { Field } from "@/components/Field";
+import { MetricCard } from "@/components/MetricCard";
+import { PrivacyNotice } from "@/components/PrivacyNotice";
+import { ResultSection } from "@/components/ResultSection";
+import { RiskBadge } from "@/components/RiskBadge";
+import {
+  analyzeMeetingPatterns,
+  analyzeStakeholder,
+  analyzeTranscript,
+  generateDecisionChallenge,
+  generateMeetingPreparation,
+  generateMeetingSimulation,
+  transcribeMeetingAudio
+} from "@/lib/aiService";
+import {
+  DecisionChallengeResult,
+  MeetingPatternsResult,
+  MeetingPreparationInput,
+  MeetingPreparationResult,
+  MeetingScenario,
+  StakeholderAnalysisResult,
+  TranscriptionResult,
+  TranscriptAnalysisResult
+} from "@/types/ai";
+
+type AreaId =
+  | "dashboard"
+  | "record"
+  | "prepare"
+  | "decision"
+  | "simulate"
+  | "transcript"
+  | "stakeholder"
+  | "patterns"
+  | "settings";
+
+const navItems = [
+  { id: "dashboard", label: "Dashboard", icon: Gauge },
+  { id: "record", label: "Meeting aufnehmen", icon: Mic },
+  { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
+  { id: "decision", label: "Entscheidung pruefen", icon: ShieldQuestion },
+  { id: "simulate", label: "Meeting simulieren", icon: PlayCircle },
+  { id: "transcript", label: "Transkript analysieren", icon: FileSearch },
+  { id: "stakeholder", label: "Stakeholder analysieren", icon: Users },
+  { id: "patterns", label: "Meeting-Muster erkennen", icon: BarChart3 },
+  { id: "settings", label: "Einstellungen", icon: Settings }
+] as const;
+
+const initialPreparation: MeetingPreparationInput = {
+  title: "",
+  goal: "",
+  participants: "",
+  roles: "",
+  desiredOutcome: "",
+  criticalTopics: "",
+  ownPosition: ""
+};
+
+export default function Home() {
+  const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
+  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "ready">("idle");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioSourceLabel, setAudioSourceLabel] = useState("");
+  const [recordingDurationLabel, setRecordingDurationLabel] = useState("unbekannt");
+  const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
+  const [preparationInput, setPreparationInput] = useState(initialPreparation);
+  const [preparation, setPreparation] = useState<MeetingPreparationResult | null>(null);
+  const [decisionText, setDecisionText] = useState("");
+  const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
+  const [simulationInput, setSimulationInput] = useState({ goal: "", participants: "", conflicts: "" });
+  const [simulation, setSimulation] = useState<MeetingScenario[] | null>(null);
+  const [transcriptText, setTranscriptText] = useState("");
+  const [transcript, setTranscript] = useState<TranscriptAnalysisResult | null>(null);
+  const [stakeholderInput, setStakeholderInput] = useState({
+    name: "",
+    role: "",
+    organisation: "",
+    interests: "",
+    publicStatements: "",
+    experience: ""
+  });
+  const [stakeholder, setStakeholder] = useState<StakeholderAnalysisResult | null>(null);
+  const [patternsText, setPatternsText] = useState("");
+  const [patterns, setPatterns] = useState<MeetingPatternsResult | null>(null);
+
+  const dashboardStats = useMemo(
+    () => ({
+      preparedMeetings: preparation ? "1" : "0",
+      analyzedTranscripts: transcript ? "1" : "0",
+      criticalQuestions: preparation ? String(preparation.criticalQuestions.length) : "0",
+      recurringObjections: patterns ? String(patterns.recurringObjections.length) : "0"
+    }),
+    [patterns, preparation, transcript]
+  );
+
+  const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
+
+  function clearAudioUrl() {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+  }
+
+  async function startRecording() {
+    clearAudioUrl();
+    setTranscription(null);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream);
+    const chunks: BlobPart[] = [];
+    const startedAt = Date.now();
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      const nextUrl = URL.createObjectURL(blob);
+      const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      setAudioBlob(blob);
+      setAudioUrl(nextUrl);
+      setAudioSourceLabel("Browser-Aufnahme");
+      setRecordingDurationLabel(seconds ? `${seconds} Sekunden` : "kurze Aufnahme");
+      setRecordingState("ready");
+      setRecorder(null);
+    };
+
+    mediaRecorder.start();
+    setRecorder(mediaRecorder);
+    setAudioBlob(null);
+    setAudioSourceLabel("Browser-Aufnahme");
+    setRecordingState("recording");
+  }
+
+  function pauseRecording() {
+    if (recorder?.state === "recording") {
+      recorder.pause();
+      setRecordingState("paused");
+    }
+  }
+
+  function resumeRecording() {
+    if (recorder?.state === "paused") {
+      recorder.resume();
+      setRecordingState("recording");
+    }
+  }
+
+  function stopRecording() {
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  }
+
+  function handleAudioUpload(file: File | null) {
+    if (!file) {
+      return;
+    }
+    clearAudioUrl();
+    setRecorder(null);
+    setAudioBlob(file);
+    setAudioUrl(URL.createObjectURL(file));
+    setAudioSourceLabel(file.name);
+    setRecordingDurationLabel("hochgeladene Audiodatei");
+    setRecordingState("ready");
+    setTranscription(null);
+  }
+
+  async function handleTranscription() {
+    if (!audioBlob) {
+      return;
+    }
+    const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel);
+    setTranscription(result);
+    setTranscriptText(result.transcript);
+  }
+
+  async function handlePreparation(event: FormEvent) {
+    event.preventDefault();
+    setPreparation(await generateMeetingPreparation(preparationInput));
+  }
+
+  async function handleDecision(event: FormEvent) {
+    event.preventDefault();
+    setDecision(await generateDecisionChallenge(decisionText));
+  }
+
+  async function handleSimulation(event: FormEvent) {
+    event.preventDefault();
+    setSimulation(await generateMeetingSimulation());
+  }
+
+  async function handleTranscript(event: FormEvent) {
+    event.preventDefault();
+    setTranscript(await analyzeTranscript(transcriptText));
+  }
+
+  async function handleStakeholder(event: FormEvent) {
+    event.preventDefault();
+    setStakeholder(await analyzeStakeholder());
+  }
+
+  async function handlePatterns(event: FormEvent) {
+    event.preventDefault();
+    setPatterns(await analyzeMeetingPatterns());
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand__mark">
+            <Brain size={24} aria-hidden="true" />
+          </div>
+          <div>
+            <strong>Meeting Intelligence KI</strong>
+            <span>Strategie statt Mitschrift</span>
+          </div>
+        </div>
+        <nav className="nav-list" aria-label="Hauptbereiche">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                className={activeArea === item.id ? "nav-button nav-button--active" : "nav-button"}
+                key={item.id}
+                onClick={() => setActiveArea(item.id)}
+                type="button"
+              >
+                <span className="nav-button__icon">
+                  <Icon size={18} aria-hidden="true" />
+                </span>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Arbeitsversion</p>
+            <h1>{pageTitle}</h1>
+            <p className="lead">
+              Eine lokale Web-App fuer strategische Meeting-Vorbereitung, Entscheidungsschaerfung,
+              Simulation und kontinuierliche Verbesserung der eigenen Meeting-Performance.
+            </p>
+          </div>
+          <span className="status-pill">Mock-KI aktiv</span>
+        </header>
+
+        {activeArea === "dashboard" && (
+          <section className="section">
+            <div className="grid grid--metrics">
+              <MetricCard icon={ClipboardCheck} label="Vorbereitete Meetings" value={dashboardStats.preparedMeetings} detail="in dieser Session" />
+              <MetricCard icon={FileSearch} label="Analysierte Transkripte" value={dashboardStats.analyzedTranscripts} detail="lokale Eingaben" />
+              <MetricCard icon={AlertTriangle} label="Offene kritische Fragen" value={dashboardStats.criticalQuestions} detail="aus Vorbereitung" />
+              <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwaende" value={dashboardStats.recurringObjections} detail="aus Musteranalyse" />
+            </div>
+            <div className="grid grid--two">
+              <article className="card">
+                <h2>Letzte Analysen</h2>
+                <ul className="plain-list">
+                  <li>{preparation ? "Meeting-Vorbereitung erzeugt" : "Noch keine Meeting-Vorbereitung vorhanden"}</li>
+                  <li>{decision ? "Devil's-Advocate-Pruefung erzeugt" : "Noch keine Entscheidung geprueft"}</li>
+                  <li>{patterns ? "Meeting-Muster ausgewertet" : "Noch keine Musteranalyse vorhanden"}</li>
+                </ul>
+              </article>
+              <article className="card">
+                <h2>Naechster sinnvoller Schritt</h2>
+                <p className="lead">
+                  Beginne mit einer Vorbereitung oder pruefe eine anstehende Entscheidung. Die aktuelle
+                  Version nutzt strukturierte Mock-Ergebnisse und ist fuer spaetere KI-APIs vorbereitet.
+                </p>
+              </article>
+            </div>
+          </section>
+        )}
+
+        {activeArea === "record" && (
+          <section className="section">
+            <PrivacyNotice />
+            <div className="grid grid--two">
+              <article className="card">
+                <h2>Meeting aufnehmen</h2>
+                <p className="lead">
+                  Aufnahme erfolgt lokal im Browser. Vor dem Start fragt der Browser nach Zugriff auf das Mikrofon.
+                </p>
+                <div className="recording-panel">
+                  <span className={`recording-status recording-status--${recordingState}`}>
+                    Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme laeuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
+                  </span>
+                  <div className="button-row">
+                    <button className="primary-button" onClick={startRecording} type="button" disabled={recordingState === "recording"}>
+                      <Mic size={17} /> Start
+                    </button>
+                    <button className="secondary-button" onClick={recordingState === "paused" ? resumeRecording : pauseRecording} type="button" disabled={!recorder}>
+                      <PauseCircle size={17} /> {recordingState === "paused" ? "Fortsetzen" : "Pause"}
+                    </button>
+                    <button className="secondary-button" onClick={stopRecording} type="button" disabled={!recorder}>
+                      <Square size={15} /> Stopp
+                    </button>
+                  </div>
+                </div>
+                {audioUrl && (
+                  <div className="audio-preview">
+                    <strong>{audioSourceLabel}</strong>
+                    <audio controls src={audioUrl} />
+                  </div>
+                )}
+              </article>
+
+              <article className="card">
+                <h2>Audio hochladen</h2>
+                <p className="lead">
+                  Alternativ kann eine bestehende Aufnahme hochgeladen werden. Die aktuelle Version erzeugt daraus ein Mock-Transkript.
+                </p>
+                <label className="upload-box">
+                  <Upload size={22} aria-hidden="true" />
+                  <span>Audiodatei auswaehlen</span>
+                  <input accept="audio/*" onChange={(event) => handleAudioUpload(event.target.files?.[0] ?? null)} type="file" />
+                </label>
+                <button className="primary-button" onClick={handleTranscription} type="button" disabled={!audioBlob}>
+                  <Sparkles size={17} /> Transkription erzeugen
+                </button>
+              </article>
+            </div>
+            {transcription && (
+              <div className="result-grid">
+                <section className="result-block">
+                  <h3>Transkriptionsstatus</h3>
+                  <p><strong>Quelle:</strong> {transcription.sourceLabel}</p>
+                  <p><strong>Dauer:</strong> {transcription.durationLabel}</p>
+                  <p><strong>Qualitaet:</strong> {transcription.confidence}</p>
+                </section>
+                <section className="result-block">
+                  <h3>Erzeugtes Transkript</h3>
+                  <p>{transcription.transcript}</p>
+                  <button className="secondary-button" onClick={() => setActiveArea("transcript")} type="button">
+                    <FileSearch size={17} /> In Transkriptanalyse oeffnen
+                  </button>
+                </section>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "prepare" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handlePreparation}>
+              <Field label="Meeting-Titel">
+                <input value={preparationInput.title} onChange={(event) => setPreparationInput({ ...preparationInput, title: event.target.value })} />
+              </Field>
+              <Field label="Ziel des Meetings">
+                <input value={preparationInput.goal} onChange={(event) => setPreparationInput({ ...preparationInput, goal: event.target.value })} />
+              </Field>
+              <Field label="Teilnehmer">
+                <textarea value={preparationInput.participants} onChange={(event) => setPreparationInput({ ...preparationInput, participants: event.target.value })} />
+              </Field>
+              <Field label="Rollen der Teilnehmer">
+                <textarea value={preparationInput.roles} onChange={(event) => setPreparationInput({ ...preparationInput, roles: event.target.value })} />
+              </Field>
+              <Field label="Gewuenschtes Ergebnis">
+                <textarea value={preparationInput.desiredOutcome} onChange={(event) => setPreparationInput({ ...preparationInput, desiredOutcome: event.target.value })} />
+              </Field>
+              <Field label="Kritische Themen">
+                <textarea value={preparationInput.criticalTopics} onChange={(event) => setPreparationInput({ ...preparationInput, criticalTopics: event.target.value })} />
+              </Field>
+              <Field label="Eigene Position">
+                <textarea value={preparationInput.ownPosition} onChange={(event) => setPreparationInput({ ...preparationInput, ownPosition: event.target.value })} />
+              </Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><Sparkles size={17} /> Vorbereitung erzeugen</button>
+              </div>
+            </form>
+            {preparation && (
+              <div className="result-grid">
+                <ResultSection title="Zentrale Argumente" items={preparation.arguments} />
+                <ResultSection title="Erwartbare Einwaende" items={preparation.objections} />
+                <ResultSection title="Kritische Fragen" items={preparation.criticalQuestions} />
+                <ResultSection title="Antwortstrategien" items={preparation.responseStrategies} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "decision" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handleDecision}>
+              <Field label="Entscheidung">
+                <textarea value={decisionText} onChange={(event) => setDecisionText(event.target.value)} />
+              </Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><ShieldQuestion size={17} /> Devil&apos;s Advocate starten</button>
+              </div>
+            </form>
+            {decision && (
+              <div className="result-grid">
+                <section className="result-block">
+                  <h3>Risikobewertung</h3>
+                  <RiskBadge level={decision.risk.level} />
+                  <p>{decision.risk.rationale}</p>
+                </section>
+                <ResultSection title="10 moegliche Schwachstellen" items={decision.weaknesses} />
+                <ResultSection title="5 unbequeme Fragen" items={decision.uncomfortableQuestions} />
+                {Object.entries(decision.counterArguments).map(([role, items]) => (
+                  <ResultSection key={role} title={`Gegenargumente: ${role}`} items={items} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "simulate" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handleSimulation}>
+              <Field label="Meeting-Ziel">
+                <textarea value={simulationInput.goal} onChange={(event) => setSimulationInput({ ...simulationInput, goal: event.target.value })} />
+              </Field>
+              <Field label="Teilnehmer">
+                <textarea value={simulationInput.participants} onChange={(event) => setSimulationInput({ ...simulationInput, participants: event.target.value })} />
+              </Field>
+              <Field label="Konfliktthemen">
+                <textarea value={simulationInput.conflicts} onChange={(event) => setSimulationInput({ ...simulationInput, conflicts: event.target.value })} />
+              </Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><PlayCircle size={17} /> Szenarien erzeugen</button>
+              </div>
+            </form>
+            {simulation && (
+              <div className="scenario-grid">
+                {simulation.map((scenario) => (
+                  <article className="scenario-card" key={scenario.name}>
+                    <h3>{scenario.name}</h3>
+                    <ResultSection title="Wahrscheinlicher Verlauf" items={scenario.likelyFlow} />
+                    <ResultSection title="Moegliche Aussagen" items={scenario.participantStatements} />
+                    <ResultSection title="Optimale Antworten" items={scenario.optimalResponses} />
+                    <ResultSection title="Kritische Wendepunkte" items={scenario.turningPoints} />
+                    <p><strong>Abschluss:</strong> {scenario.closingStatement}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "transcript" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handleTranscript}>
+              <Field label="Meeting-Transkript">
+                <textarea value={transcriptText} onChange={(event) => setTranscriptText(event.target.value)} />
+              </Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><FileSearch size={17} /> Transkript analysieren</button>
+              </div>
+            </form>
+            {transcript && (
+              <div className="result-grid">
+                <ResultSection title="Was wurde gesagt?" items={transcript.said} />
+                <ResultSection title="Was wurde nicht gesagt?" items={transcript.unsaid} />
+                <ResultSection title="Umgangene Themen" items={transcript.avoidedTopics} />
+                <ResultSection title="Widersprueche" items={transcript.contradictions} />
+                <ResultSection title="Offene Risiken" items={transcript.openRisks} />
+                <ResultSection title="Empfohlene Nachfragen" items={transcript.followUpQuestions} />
+                <ResultSection title="Zeitstempel" items={transcript.timestamps.length ? transcript.timestamps.map((item) => `${item.time}: ${item.note}`) : ["Keine Zeitstempel erkannt."]} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "stakeholder" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handleStakeholder}>
+              <Field label="Name"><input value={stakeholderInput.name} onChange={(event) => setStakeholderInput({ ...stakeholderInput, name: event.target.value })} /></Field>
+              <Field label="Rolle"><input value={stakeholderInput.role} onChange={(event) => setStakeholderInput({ ...stakeholderInput, role: event.target.value })} /></Field>
+              <Field label="Organisation"><input value={stakeholderInput.organisation} onChange={(event) => setStakeholderInput({ ...stakeholderInput, organisation: event.target.value })} /></Field>
+              <Field label="Bekannte Interessen"><textarea value={stakeholderInput.interests} onChange={(event) => setStakeholderInput({ ...stakeholderInput, interests: event.target.value })} /></Field>
+              <Field label="Oeffentliche Aussagen oder Textauszuege"><textarea value={stakeholderInput.publicStatements} onChange={(event) => setStakeholderInput({ ...stakeholderInput, publicStatements: event.target.value })} /></Field>
+              <Field label="Bisherige Erfahrungen"><textarea value={stakeholderInput.experience} onChange={(event) => setStakeholderInput({ ...stakeholderInput, experience: event.target.value })} /></Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><Users size={17} /> Stakeholder analysieren</button>
+              </div>
+            </form>
+            {stakeholder && (
+              <div className="result-grid">
+                <ResultSection title="Vermutete Interessen" items={stakeholder.inferredInterests} />
+                <ResultSection title="Moegliche Trigger" items={stakeholder.triggers} />
+                <ResultSection title="Typische Sprachmuster" items={stakeholder.languagePatterns} />
+                <ResultSection title="Gesprächsstrategie" items={stakeholder.conversationStrategy} />
+                <ResultSection title="Gut anschliessende Formulierungen" items={stakeholder.connectingPhrases} />
+                <ResultSection title="Zu vermeidende Formulierungen" items={stakeholder.avoidPhrases} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "patterns" && (
+          <section className="section">
+            <PrivacyNotice />
+            <form className="card form-grid" onSubmit={handlePatterns}>
+              <Field label="Mehrere Meeting-Zusammenfassungen oder Transkripte">
+                <textarea value={patternsText} onChange={(event) => setPatternsText(event.target.value)} />
+              </Field>
+              <div className="form-actions">
+                <button className="primary-button" type="submit"><BarChart3 size={17} /> Muster erkennen</button>
+              </div>
+            </form>
+            {patterns && (
+              <div className="result-grid">
+                <ResultSection title="Wiederkehrende Einwaende" items={patterns.recurringObjections} />
+                <ResultSection title="Eigene argumentative Schwaechen" items={patterns.argumentativeWeaknesses} />
+                <ResultSection title="Ueberzeugende Formulierungen" items={patterns.convincingPhrases} />
+                <ResultSection title="Unsichere Formulierungen" items={patterns.uncertainPhrases} />
+                <ResultSection title="Typische Konfliktmuster" items={patterns.conflictPatterns} />
+                <ResultSection title="Verbesserungsvorschlaege" items={patterns.improvements} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeArea === "settings" && (
+          <section className="section">
+            <article className="card">
+              <h2>Einstellungen</h2>
+              <div className="setting-row">
+                <span>KI-Anbieter</span>
+                <select defaultValue="mock"><option value="mock">Mock-Service</option><option>OpenAI</option><option>Claude</option><option>Anderer Anbieter</option></select>
+              </div>
+              <div className="setting-row">
+                <span>API-Key</span>
+                <input placeholder="Noch nicht verbunden" type="password" />
+              </div>
+              <div className="setting-row">
+                <span>Datenschutzmodus</span>
+                <select defaultValue="local"><option value="local">Nur lokale Eingaben</option><option>API mit Freigabe</option><option>Unternehmensmodus</option></select>
+              </div>
+              <div className="setting-row">
+                <span>Sprache</span>
+                <select defaultValue="de"><option value="de">Deutsch</option><option value="en">Englisch</option></select>
+              </div>
+              <div className="setting-row">
+                <span>Exportformat</span>
+                <select defaultValue="pdf"><option value="pdf">PDF</option><option value="docx">Word</option><option value="md">Markdown</option></select>
+              </div>
+            </article>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
