@@ -717,8 +717,13 @@ h3 {
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.8fr) minmax(320px, auto);
+  grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.8fr) minmax(440px, auto);
   padding: 12px;
+}
+
+.archive-row--selected {
+  background: #edf8f2;
+  border-color: #b9dec7;
 }
 
 .archive-row strong,
@@ -747,6 +752,74 @@ h3 {
 .archive-row__actions .secondary-button {
   min-height: 38px;
   padding: 0 12px;
+}
+
+.archive-detail-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.archive-detail-panel__header {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.archive-detail-panel__header h2 {
+  margin-bottom: 6px;
+}
+
+.archive-detail-panel__header p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.archive-detail-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.archive-detail-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.archive-detail-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.archive-detail-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.detail-list dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  line-height: 1.45;
+  margin: 0;
 }
 
 .audio-workflow {
@@ -2063,6 +2136,9 @@ h3 {
   .form-grid,
   .result-grid,
   .meeting-file-form,
+  .archive-detail-grid,
+  .archive-detail-metrics,
+  .archive-detail-panel__header,
   .archive-intro,
   .archive-grid,
   .archive-row,

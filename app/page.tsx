@@ -367,6 +367,7 @@ export default function Home() {
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
+  const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [fileSystemDirectoryHandle, setFileSystemDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [fileSystemStatus, setFileSystemStatus] = useState("Noch kein lokaler Ordner verbunden.");
   const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
@@ -460,6 +461,13 @@ export default function Home() {
       return statusMatches && projectMatches && queryMatches;
     });
   }, [archiveProjectFilter, archiveSearch, archiveStatusFilter, savedArchives]);
+  const selectedArchive = useMemo(() => {
+    if (!selectedArchiveId) {
+      return filteredArchives[0] ?? savedArchives[0] ?? null;
+    }
+
+    return savedArchives.find((archive) => archive.id === selectedArchiveId) ?? filteredArchives[0] ?? null;
+  }, [filteredArchives, savedArchives, selectedArchiveId]);
   const qualityReview: AiQualityReview = useMemo(() => {
     const missingInputs = [
       !hasMeaningfulText(currentMeetingTitle) || currentMeetingTitle === "Neue Meeting-Akte" ? "Meeting-Titel präzisieren" : "",
@@ -1167,6 +1175,7 @@ export default function Home() {
         ...importedArchives,
         ...savedArchives.filter((archive) => !importedIds.has(archive.id))
       ].slice(0, 50));
+      setSelectedArchiveId(importedArchives[0]?.id ?? null);
       setLoadedArchiveNames(importedArchives.map((archive) => archive.metadata.title));
       setFileSystemStatus(`${importedArchives.length} Projektakten aus dem Ordner geladen.`);
     } catch {
@@ -1242,6 +1251,10 @@ export default function Home() {
 
   function downloadProfessionalExport(kind: ExportKind) {
     const archive = createCurrentMeetingArchive();
+    downloadArchiveProfessionalExport(archive, kind);
+  }
+
+  function downloadArchiveProfessionalExport(archive: MeetingArchive, kind: ExportKind) {
     const suffix = kind === "management" ? "management-protokoll" : kind === "actions" ? "massnahmenliste" : kind === "decision" ? "entscheidungsnotiz" : "projektaktenbericht";
     const fileName = createArchiveFileName(archive.metadata.title).replace(".meeting.json", `-${suffix}.md`);
     downloadTextFile(archiveToProfessionalExport(archive, kind), fileName, "text/markdown");
@@ -1288,6 +1301,7 @@ export default function Home() {
     setRecordingState("idle");
     setTranscriptionNotice(archive.transcription.rawText ? "Transkript aus Projektakte geladen." : "Projektakte geladen. Kein Transkript in der Akte enthalten.");
     setArchiveStatus(`Projektakte geladen: ${archive.metadata.title}`);
+    setSelectedArchiveId(archive.id);
   }
 
   async function handleMeetingArchiveUpload(file: File | null) {
@@ -1303,6 +1317,7 @@ export default function Home() {
       }
       applyMeetingArchive(archive);
       storeArchiveInBrowser(archive);
+      setSelectedArchiveId(archive.id);
       setLoadedArchiveNames([archive.metadata.title || file.name]);
     } catch {
       setArchiveStatus("Diese Datei konnte nicht als Meeting-Projektakte gelesen werden.");
@@ -1335,6 +1350,7 @@ export default function Home() {
           ...validArchives,
           ...savedArchives.filter((archive) => !importedIds.has(archive.id))
         ].slice(0, 50));
+        setSelectedArchiveId(validArchives[0]?.id ?? null);
       }
       setArchiveAnalysis(await analyzeMeetingArchives(validArchives, activeAiConfig));
       setArchiveStatus(`${validArchives.length} Projektakten für die übergreifende Analyse geladen.`);
@@ -1919,7 +1935,7 @@ export default function Home() {
                 <h3>Lokale Meeting-Übersicht</h3>
                 <div className="archive-table">
                   {filteredArchives.map((archive) => (
-                    <article className="archive-row" key={archive.id}>
+                    <article className={selectedArchive?.id === archive.id ? "archive-row archive-row--selected" : "archive-row"} key={archive.id}>
                       <div>
                         <strong>{archive.metadata.title}</strong>
                         <span>{archive.metadata.project || "ohne Projekt"} · {archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
@@ -1929,8 +1945,11 @@ export default function Home() {
                         <span>{archive.transcriptAnalysis ? "Analyse vorhanden" : "ohne Analyse"}</span>
                       </div>
                       <div className="archive-row__actions">
+                        <button className="secondary-button" onClick={() => setSelectedArchiveId(archive.id)} type="button">
+                          <Eye size={16} /> Details
+                        </button>
                         <button className="secondary-button" onClick={() => applyMeetingArchive(archive)} type="button">
-                          <FolderOpen size={16} /> Öffnen
+                          <FolderOpen size={16} /> Als Arbeitsakte öffnen
                         </button>
                         <button className="secondary-button" onClick={() => downloadArchive(archive)} type="button">
                           <Download size={16} /> JSON
@@ -1945,6 +1964,129 @@ export default function Home() {
                     <p className="result-note">Keine Akten passen zu Suche und Filter.</p>
                   )}
                 </div>
+              </section>
+            )}
+            {selectedArchive && (
+              <section className="archive-detail-panel">
+                <div className="archive-detail-panel__header">
+                  <div>
+                    <span className="quality-panel__eyebrow">Projektakten-Detailansicht</span>
+                    <h2>{selectedArchive.metadata.title}</h2>
+                    <p>
+                      {selectedArchive.metadata.project || "ohne Projekt"} · {selectedArchive.metadata.date} · Status: {selectedArchive.metadata.status}
+                    </p>
+                  </div>
+                  <div className="archive-detail-panel__actions">
+                    <button className="primary-button" onClick={() => applyMeetingArchive(selectedArchive)} type="button">
+                      <FolderOpen size={17} /> Als Arbeitsakte öffnen
+                    </button>
+                    <button className="secondary-button" onClick={() => downloadArchive(selectedArchive)} type="button">
+                      <Download size={17} /> JSON
+                    </button>
+                    <button className="secondary-button" onClick={() => downloadArchiveProfessionalExport(selectedArchive, "management")} type="button">
+                      <FileText size={17} /> Management
+                    </button>
+                    <button className="secondary-button" onClick={() => downloadArchiveProfessionalExport(selectedArchive, "actions")} type="button">
+                      <ListChecks size={17} /> Maßnahmen
+                    </button>
+                    <button className="secondary-button" onClick={() => downloadArchiveProfessionalExport(selectedArchive, "decision")} type="button">
+                      <ShieldQuestion size={17} /> Entscheidung
+                    </button>
+                  </div>
+                </div>
+
+                <div className="archive-detail-metrics">
+                  <MetricCard icon={ClipboardCheck} label="Qualität" value={`${selectedArchive.qualityReview?.score ?? 0}/100`} detail={selectedArchive.qualityReview?.level ?? "nicht bewertet"} />
+                  <MetricCard icon={FileSearch} label="Transkript" value={selectedArchive.transcription.rawText ? "ja" : "nein"} detail={selectedArchive.transcription.result?.confidence ?? "nicht erzeugt"} />
+                  <MetricCard icon={ShieldQuestion} label="Entscheidungen" value={String(selectedArchive.transcriptAnalysis?.decisions.length ?? 0)} detail="aus Analyse" />
+                  <MetricCard icon={ListChecks} label="Maßnahmen" value={String(selectedArchive.transcriptAnalysis?.actionPlan.length ?? 0)} detail="im Register" />
+                </div>
+
+                <div className="archive-detail-grid">
+                  <section className="result-block">
+                    <h3>Metadaten</h3>
+                    <dl className="detail-list">
+                      <div>
+                        <dt>Projekt</dt>
+                        <dd>{selectedArchive.metadata.project || "nicht zugeordnet"}</dd>
+                      </div>
+                      <div>
+                        <dt>Teilnehmer</dt>
+                        <dd>{selectedArchive.metadata.participants || "nicht erfasst"}</dd>
+                      </div>
+                      <div>
+                        <dt>Ziel</dt>
+                        <dd>{selectedArchive.metadata.goal || "nicht erfasst"}</dd>
+                      </div>
+                      <div>
+                        <dt>Gewünschtes Ergebnis</dt>
+                        <dd>{selectedArchive.metadata.desiredOutcome || "nicht erfasst"}</dd>
+                      </div>
+                      <div>
+                        <dt>Gespeichert</dt>
+                        <dd>{new Date(selectedArchive.savedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                  <section className="result-block">
+                    <h3>Agenda</h3>
+                    {selectedArchive.agenda.result?.refinedAgenda.length ? (
+                      <ul>
+                        {selectedArchive.agenda.result.refinedAgenda.map((item) => (
+                          <li key={`${item.topic}-${item.owner}`}>{item.topic} · {item.owner} · {item.timeBudget}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>{selectedArchive.agenda.input.existingAgenda || selectedArchive.agenda.input.agendaText || "Keine Agenda gespeichert."}</p>
+                    )}
+                  </section>
+                  <section className="result-block result-block--wide">
+                    <h3>Management Summary</h3>
+                    <p>{selectedArchive.transcriptAnalysis?.managementSummary ?? "Noch keine Management Summary vorhanden."}</p>
+                  </section>
+                  <ResultSection title="Entscheidungen" items={selectedArchive.transcriptAnalysis?.decisions ?? []} />
+                  <ResultSection title="Vertagte Entscheidungen" items={selectedArchive.transcriptAnalysis?.deferredDecisions ?? []} />
+                  <ResultSection title="Offene Risiken" items={selectedArchive.transcriptAnalysis?.openRisks ?? []} />
+                  <ResultSection title="Offene Punkte" items={selectedArchive.transcriptAnalysis?.openPoints ?? []} />
+                  <ResultSection title="Qualitätsnotizen" items={selectedArchive.qualityReview?.reliabilityNotes ?? []} />
+                </div>
+
+                {selectedArchive.transcriptAnalysis?.actionPlan.length ? (
+                  <div className="archive-detail-actions">
+                    <h3>Maßnahmenregister</h3>
+                    <div className="measure-register">
+                      {selectedArchive.transcriptAnalysis.actionPlan.map((item) => (
+                        <article className="measure-row" key={`${selectedArchive.id}-${item.task}-${item.owner}`}>
+                          <div>
+                            <strong>{item.task}</strong>
+                            <span>{item.risk}</span>
+                          </div>
+                          <dl>
+                            <div>
+                              <dt>Owner</dt>
+                              <dd>{item.owner}</dd>
+                            </div>
+                            <div>
+                              <dt>Frist</dt>
+                              <dd>{item.due}</dd>
+                            </div>
+                            <div>
+                              <dt>Priorität</dt>
+                              <dd>{item.priority}</dd>
+                            </div>
+                          </dl>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="result-note">In dieser Akte ist noch kein Maßnahmenregister vorhanden.</p>
+                )}
+
+                <section className="result-block result-block--wide">
+                  <h3>Rohtranskript</h3>
+                  <pre className="transcript-raw">{selectedArchive.transcription.rawText || "Kein Transkript gespeichert."}</pre>
+                </section>
               </section>
             )}
             {loadedArchiveNames.length > 0 && (
