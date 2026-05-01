@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowUp,
   BarChart3,
   Brain,
   ClipboardCheck,
@@ -13,6 +14,7 @@ import {
   Gauge,
   MessageSquareText,
   PlayCircle,
+  Plus,
   Square,
   Settings,
   ShieldQuestion,
@@ -79,11 +81,21 @@ const initialPreparation: MeetingPreparationInput = {
   ownPosition: ""
 };
 
+const createSilentWaveform = () => Array.from({ length: 48 }, () => 8);
+
+function formatTimer(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
 export default function Home() {
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "ready">("idle");
   const [audioLevel, setAudioLevel] = useState(0);
+  const [waveformBars, setWaveformBars] = useState<number[]>(createSilentWaveform);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -105,6 +117,7 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [preparationInput, setPreparationInput] = useState(initialPreparation);
   const [preparation, setPreparation] = useState<MeetingPreparationResult | null>(null);
@@ -138,6 +151,20 @@ export default function Home() {
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
   const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
+
+  useEffect(() => {
+    if (recordingState !== "recording" || !startedAtRef.current) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (startedAtRef.current) {
+        setRecordingSeconds(Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000)));
+      }
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [recordingState]);
 
   useEffect(() => {
     return () => {
@@ -189,6 +216,10 @@ export default function Home() {
       const level = Math.min(100, Math.round(rms * 220));
 
       setAudioLevel(level);
+      setWaveformBars((previousBars) => {
+        const nextHeight = Math.max(6, Math.min(44, Math.round(level * 0.5) + 6));
+        return [...previousBars.slice(1), nextHeight];
+      });
       setIsSpeaking(level > 8);
       animationFrameRef.current = requestAnimationFrame(updateMeter);
     };
@@ -209,6 +240,8 @@ export default function Home() {
       setRecordingError("");
       setAudioBlob(null);
       setAudioFileName("");
+      setWaveformBars(createSilentWaveform());
+      setRecordingSeconds(0);
 
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
         setRecordingError("Dieser Browser unterstützt Aufnahme über Mikrofon nicht.");
@@ -219,6 +252,7 @@ export default function Home() {
       const mediaRecorder = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       const startedAt = Date.now();
+      startedAtRef.current = startedAt;
       mediaStreamRef.current = stream;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -240,8 +274,10 @@ export default function Home() {
         setAudioSourceLabel("Browser-Aufnahme");
         setAudioFileName(fileName);
         setRecordingDurationLabel(`${seconds} Sekunden`);
+        setRecordingSeconds(seconds);
         setRecordingState("ready");
         setRecorder(null);
+        startedAtRef.current = null;
       };
 
       mediaRecorder.start();
@@ -256,6 +292,7 @@ export default function Home() {
           : "Aufnahme konnte nicht gestartet werden."
       );
       setRecordingState("idle");
+      startedAtRef.current = null;
       stopLevelMeter();
     }
   }
@@ -264,6 +301,7 @@ export default function Home() {
     if (recorder?.state === "recording") {
       recorder.pause();
       setRecordingState("paused");
+      startedAtRef.current = null;
       stopLevelMeter();
     }
   }
@@ -271,6 +309,7 @@ export default function Home() {
   function resumeRecording() {
     if (recorder?.state === "paused") {
       recorder.resume();
+      startedAtRef.current = Date.now() - recordingSeconds * 1000;
       if (mediaStreamRef.current) {
         startLevelMeter(mediaStreamRef.current);
       }
@@ -296,6 +335,8 @@ export default function Home() {
     setAudioSourceLabel(file.name);
     setAudioFileName(file.name);
     setRecordingDurationLabel("hochgeladene Audiodatei");
+    setRecordingSeconds(0);
+    setWaveformBars(createSilentWaveform());
     setRecordingState("ready");
     setRecordingError("");
     setTranscription(null);
@@ -462,6 +503,45 @@ export default function Home() {
                   notwendigen Zustimmungen sowie internen Vorgaben geklärt sein.
                 </p>
                 <div className="recording-panel">
+                  <div className={`recorder-composer recorder-composer--${recordingState}`}>
+                    <button
+                      aria-label="Neue Aufnahme starten"
+                      className="recorder-icon-button recorder-icon-button--ghost"
+                      disabled={recordingState === "recording" || recordingState === "paused"}
+                      onClick={startRecording}
+                      type="button"
+                    >
+                      <Plus size={24} aria-hidden="true" />
+                    </button>
+                    <div className="recorder-waveform" aria-label="Live-Wellenform">
+                      {waveformBars.map((height, index) => (
+                        <span
+                          className={recordingState === "recording" ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
+                          key={`${index}-${height}`}
+                          style={{ height: `${height}px` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="recorder-timer">{formatTimer(recordingSeconds)}</span>
+                    <button
+                      aria-label={recordingState === "recording" ? "Aufnahme stoppen" : "Aufnahme pausiert oder nicht gestartet"}
+                      className="recorder-icon-button recorder-icon-button--stop"
+                      disabled={!recorder}
+                      onClick={stopRecording}
+                      type="button"
+                    >
+                      <Square size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label="Aufnahme transkribieren"
+                      className="recorder-icon-button recorder-icon-button--send"
+                      disabled={!audioBlob || recordingState === "recording" || loadingAction === "transcription"}
+                      onClick={handleTranscription}
+                      type="button"
+                    >
+                      <ArrowUp size={24} aria-hidden="true" />
+                    </button>
+                  </div>
                   <div className="recording-header">
                     <span className={`recording-status recording-status--${recordingState}`}>
                       Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme läuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
