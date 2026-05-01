@@ -678,6 +678,104 @@ export default function Home() {
     transcriptText,
     transcription
   ]);
+  const workflowAssistantSteps = useMemo(() => {
+    const hasAgenda = Boolean(agenda) || hasMeaningfulText(agendaInput.existingAgenda || agendaInput.agendaText, 20);
+    const hasPreparation = Boolean(preparation);
+    const hasRecordingInput = Boolean(audioBlob) || Boolean(transcription) || hasMeaningfulText(transcriptText, 40);
+    const hasTranscriptAnalysis = Boolean(transcript);
+    const hasSavedCurrentArchive = savedArchives.some((archive) => archive.id === currentArchiveId);
+    const hasMeasures = Boolean(transcript?.actionPlan.length) || allArchiveActions.length > 0;
+    const hasReportBase = hasTranscriptAnalysis || hasSavedCurrentArchive;
+    const statusLabel = (done: boolean, ready: boolean, active = false) => {
+      if (done) {
+        return "erledigt";
+      }
+
+      if (active) {
+        return "in Arbeit";
+      }
+
+      if (ready) {
+        return "bereit";
+      }
+
+      return "offen";
+    };
+
+    return [
+      {
+        title: "Agenda klären",
+        detail: "Meeting-Ziel, Themen, Zeitbudget und vorhandene Agenda erfassen.",
+        target: "agenda" as AreaId,
+        icon: ListChecks,
+        status: statusLabel(hasAgenda, true),
+        primaryAction: hasAgenda ? "Agenda prüfen" : "Agenda anlegen"
+      },
+      {
+        title: "Vorbereitung schärfen",
+        detail: "Argumente, Einwände, kritische Fragen und Antwortstrategien erzeugen.",
+        target: "prepare" as AreaId,
+        icon: ClipboardCheck,
+        status: statusLabel(hasPreparation, hasAgenda || hasMeaningfulText(meetingMetadata.goal, 10)),
+        primaryAction: hasPreparation ? "Vorbereitung öffnen" : "Vorbereiten"
+      },
+      {
+        title: "Meeting durchführen",
+        detail: "Audio aufnehmen, vorhandene Audiodatei nutzen oder Rohtranskript einfügen.",
+        target: "record" as AreaId,
+        icon: Mic,
+        status: statusLabel(hasRecordingInput, hasPreparation || hasAgenda),
+        primaryAction: hasRecordingInput ? "Aufnahme prüfen" : "Aufnahme starten"
+      },
+      {
+        title: "Transkript analysieren",
+        detail: "Entscheidungen, Risiken, offene Punkte, nicht Gesagtes und Maßnahmen ableiten.",
+        target: "transcript" as AreaId,
+        icon: FileSearch,
+        status: statusLabel(hasTranscriptAnalysis, hasRecordingInput),
+        primaryAction: hasTranscriptAnalysis ? "Analyse öffnen" : "Analysieren"
+      },
+      {
+        title: "Projektakte sichern",
+        detail: "Arbeitsstand lokal speichern, laden, prüfen und für spätere Analysen bereithalten.",
+        target: "archives" as AreaId,
+        icon: Archive,
+        status: statusLabel(hasSavedCurrentArchive, hasTranscriptAnalysis || hasPreparation, !hasSavedCurrentArchive && currentArchiveId !== ""),
+        primaryAction: hasSavedCurrentArchive ? "Akte öffnen" : "Akte speichern"
+      },
+      {
+        title: "Maßnahmen steuern",
+        detail: "Maßnahmenregister, Projekt-Dashboard und Review vor dem nächsten Meeting nutzen.",
+        target: "projects" as AreaId,
+        icon: ListChecks,
+        status: statusLabel(hasMeasures, hasTranscriptAnalysis || allArchiveActions.length > 0),
+        primaryAction: hasMeasures ? "Cockpit öffnen" : "Maßnahmen prüfen"
+      },
+      {
+        title: "Reporting erzeugen",
+        detail: "Management-Protokoll, Entscheidungsnotiz und Maßnahmenliste exportieren.",
+        target: "reports" as AreaId,
+        icon: FileText,
+        status: statusLabel(false, hasReportBase),
+        primaryAction: "Reporting öffnen"
+      }
+    ];
+  }, [
+    agenda,
+    agendaInput.agendaText,
+    agendaInput.existingAgenda,
+    allArchiveActions.length,
+    audioBlob,
+    currentArchiveId,
+    meetingMetadata.goal,
+    preparation,
+    savedArchives,
+    transcript,
+    transcriptText,
+    transcription
+  ]);
+  const nextWorkflowStep = workflowAssistantSteps.find((step) => step.status !== "erledigt") ?? workflowAssistantSteps[workflowAssistantSteps.length - 1];
+  const NextWorkflowIcon = nextWorkflowStep.icon;
 
   useEffect(() => {
     if (recordingState !== "recording" || !startedAtRef.current) {
@@ -2020,10 +2118,10 @@ export default function Home() {
           <section className="section">
             <div className="workflow-hero">
               <article className="card">
-                <h2>Neues Meeting starten</h2>
+                <h2>Geführter Meeting-Assistent</h2>
                 <p className="lead">
-                  Starte eine neue Projektakte und arbeite Schritt für Schritt von Agenda über Vorbereitung,
-                  Aufnahme, Analyse und Maßnahmen bis zur lokalen Speicherung.
+                  Arbeite Schritt für Schritt von Agenda über Vorbereitung, Aufnahme, Analyse und Maßnahmen bis zum Reporting.
+                  Der Assistent zeigt den nächsten sinnvollen Arbeitsschritt anhand der aktuellen Akte.
                 </p>
                 <div className="button-row">
                   <button className="primary-button" onClick={startNewMeeting} type="button">
@@ -2035,13 +2133,45 @@ export default function Home() {
                 </div>
               </article>
               <article className="card">
-                <h2>KI-Modus</h2>
+                <h2>Nächster Schritt</h2>
                 <p className="lead">
-                  Aktuell: {aiMode === "api" && anthropicConnectionState === "connected" ? `${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} vorbereitet` : "Mock-KI"}.
-                  Externe API-Anfragen sind noch nicht aktiv und werden erst nach ausdrücklicher Freigabe angebunden.
+                  {nextWorkflowStep.title}: {nextWorkflowStep.detail}
                 </p>
+                <button className="primary-button" onClick={() => setActiveArea(nextWorkflowStep.target)} type="button">
+                  <NextWorkflowIcon size={17} /> {nextWorkflowStep.primaryAction}
+                </button>
               </article>
             </div>
+            <section className="workflow-assistant-panel">
+              <div className="workflow-assistant-panel__header">
+                <div>
+                  <h2>Meeting-Fortschritt</h2>
+                  <p className="lead">Die Statusanzeige bewertet nur lokal vorhandene Eingaben, Analysen und Projektakten.</p>
+                </div>
+                <span className="workflow-assistant-panel__meta">{workflowAssistantSteps.filter((step) => step.status === "erledigt").length} von {workflowAssistantSteps.length} Schritten erledigt</span>
+              </div>
+              <div className="workflow-timeline">
+                {workflowAssistantSteps.map((step, index) => {
+                  const Icon = step.icon;
+                  return (
+                    <button
+                      className={`workflow-timeline-step workflow-timeline-step--${step.status.replace(" ", "-")}`}
+                      key={step.title}
+                      onClick={() => setActiveArea(step.target)}
+                      type="button"
+                    >
+                      <span className="workflow-timeline-step__index">{index + 1}</span>
+                      <span className="workflow-timeline-step__icon"><Icon size={18} aria-hidden="true" /></span>
+                      <span className="workflow-timeline-step__content">
+                        <strong>{step.title}</strong>
+                        <small>{step.detail}</small>
+                      </span>
+                      <span className="workflow-timeline-step__status">{step.status}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
             <article className="card meeting-file-card">
               <div className="meeting-file-card__header">
                 <div>
@@ -2089,23 +2219,16 @@ export default function Home() {
               </div>
             </article>
             <div className="workflow-steps">
-              {[
-                { title: "1. Agenda", detail: "Agenda entwerfen, bestehende Agenda einfügen oder Datei laden.", target: "agenda" as AreaId, icon: ListChecks },
-                { title: "2. Vorbereitung", detail: "Argumente, Einwände, kritische Fragen und Antwortstrategien vorbereiten.", target: "prepare" as AreaId, icon: ClipboardCheck },
-                { title: "3. Aufnahme", detail: "Meeting aufnehmen oder Audio hochladen und Transkript erzeugen.", target: "record" as AreaId, icon: Mic },
-                { title: "4. Analyse", detail: "Rohtranskript, Entscheidungen, Risiken und Maßnahmen analysieren.", target: "transcript" as AreaId, icon: FileSearch },
-                { title: "5. Projektakte", detail: "Arbeitsstand lokal speichern, exportieren oder gespeicherte Akten laden.", target: "archives" as AreaId, icon: Archive },
-                { title: "6. Maßnahmen", detail: "Projektübergreifendes Register, Dashboard und Review für Folge-Meetings nutzen.", target: "projects" as AreaId, icon: ListChecks },
-                { title: "7. Reporting", detail: "Management-Berichte, Maßnahmenlisten und Entscheidungsnotizen exportieren.", target: "reports" as AreaId, icon: FileText }
-              ].map((step) => {
+              {workflowAssistantSteps.map((step, index) => {
                 const Icon = step.icon;
                 return (
                   <article className="workflow-step" key={step.title}>
                     <Icon size={22} aria-hidden="true" />
-                    <h3>{step.title}</h3>
+                    <span className={`workflow-step__status workflow-step__status--${step.status.replace(" ", "-")}`}>{step.status}</span>
+                    <h3>{index + 1}. {step.title}</h3>
                     <p>{step.detail}</p>
                     <button className="secondary-button" onClick={() => setActiveArea(step.target)} type="button">
-                      Öffnen
+                      {step.primaryAction}
                     </button>
                   </article>
                 );

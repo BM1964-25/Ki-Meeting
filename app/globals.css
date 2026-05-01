@@ -567,7 +567,7 @@ h3 {
 .workflow-steps {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .workflow-step {
@@ -577,6 +577,7 @@ h3 {
   display: grid;
   gap: 10px;
   padding: 16px;
+  position: relative;
 }
 
 .workflow-step > svg {
@@ -591,6 +592,139 @@ h3 {
   color: var(--muted);
   line-height: 1.45;
   margin: 0;
+}
+
+.workflow-step__status,
+.workflow-timeline-step__status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  justify-self: start;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.workflow-step__status--erledigt,
+.workflow-timeline-step--erledigt .workflow-timeline-step__status {
+  background: #e7f6ee;
+  color: var(--green);
+}
+
+.workflow-step__status--bereit,
+.workflow-timeline-step--bereit .workflow-timeline-step__status {
+  background: #e6f3f6;
+  color: var(--primary-dark);
+}
+
+.workflow-step__status--in-arbeit,
+.workflow-timeline-step--in-arbeit .workflow-timeline-step__status {
+  background: #fff4d7;
+  color: #7a4b00;
+}
+
+.workflow-step__status--offen,
+.workflow-timeline-step--offen .workflow-timeline-step__status {
+  background: #eef2f6;
+  color: var(--muted);
+}
+
+.workflow-assistant-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.workflow-assistant-panel__header {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.workflow-assistant-panel__header h2 {
+  margin-bottom: 8px;
+}
+
+.workflow-assistant-panel__meta {
+  background: #f4f8fa;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.workflow-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-timeline-step {
+  align-items: center;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px 34px minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.workflow-timeline-step:hover {
+  background: #ffffff;
+  border-color: #c9d6df;
+}
+
+.workflow-timeline-step--erledigt {
+  background: #f3f8f5;
+  border-color: #b7dfc8;
+}
+
+.workflow-timeline-step__index,
+.workflow-timeline-step__icon {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.workflow-timeline-step__index {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.workflow-timeline-step__icon {
+  background: #e6f3f6;
+  color: var(--primary-dark);
+}
+
+.workflow-timeline-step__content {
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-timeline-step__content strong {
+  font-size: 0.98rem;
+}
+
+.workflow-timeline-step__content small {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .meeting-file-card {
@@ -2553,6 +2687,8 @@ h3 {
   .cross-action-panel__header,
   .cross-action-row,
   .project-dashboard-grid,
+  .workflow-assistant-panel__header,
+  .workflow-timeline-step,
   .report-hero,
   .report-readiness,
   .report-export-grid,
