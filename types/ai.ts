@@ -1,4 +1,5 @@
 export type RiskLevel = "Grün" | "Gelb" | "Rot";
+export type MeetingType = "entscheidung" | "eskalation" | "status" | "verhandlung" | "strategie";
 
 export type MeetingPreparationInput = {
   title: string;
@@ -140,6 +141,7 @@ export type MeetingArchive = {
   metadata: {
     title: string;
     project?: string;
+    meetingType?: MeetingType;
     date: string;
     status: "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
     participants: string;

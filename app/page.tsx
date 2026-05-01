@@ -61,6 +61,7 @@ import {
   MeetingArchiveTimelineEvent,
   MeetingPreparationInput,
   MeetingPreparationResult,
+  MeetingType,
   MeetingScenario,
   MultiMeetingArchiveAnalysisResult,
   StakeholderAnalysisResult,
@@ -251,7 +252,7 @@ const OPENAI_AUDIO_UPLOAD_LIMIT_MB = 25;
 type AiProvider = "anthropic" | "openai";
 type AiMode = "mock" | "api";
 type MeetingStatus = "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
-type MeetingStartType = "entscheidung" | "eskalation" | "status" | "verhandlung" | "strategie";
+type MeetingStartType = MeetingType;
 
 type MeetingMetadataForm = {
   title: string;
@@ -432,6 +433,10 @@ function hasMeaningfulText(value: string | undefined, minLength = 8) {
   return Boolean(value && value.trim().length >= minLength);
 }
 
+function getMeetingTypeLabel(type?: MeetingType) {
+  return type ? meetingStartTypeTemplates[type]?.label ?? "nicht klassifiziert" : "nicht klassifiziert";
+}
+
 function classifyDueDate(due: string, status: ActionPlanStatus) {
   if (status === "Erledigt") {
     return { label: "erledigt", level: "done" as const };
@@ -523,6 +528,7 @@ export default function Home() {
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
+  const [archiveMeetingTypeFilter, setArchiveMeetingTypeFilter] = useState<MeetingType | "alle" | "nicht klassifiziert">("alle");
   const [actionSearch, setActionSearch] = useState("");
   const [actionProjectFilter, setActionProjectFilter] = useState("alle");
   const [actionStatusFilter, setActionStatusFilter] = useState<ActionPlanStatus | "alle">("alle");
@@ -596,6 +602,12 @@ export default function Home() {
       .filter((project): project is string => Boolean(project));
     return Array.from(new Set(projects)).sort((first, second) => first.localeCompare(second, "de"));
   }, [savedArchives]);
+  const archiveMeetingTypes = useMemo(() => {
+    const types = savedArchives
+      .map((archive) => archive.metadata.meetingType)
+      .filter((type): type is MeetingType => Boolean(type));
+    return Array.from(new Set(types)).sort((first, second) => getMeetingTypeLabel(first).localeCompare(getMeetingTypeLabel(second), "de"));
+  }, [savedArchives]);
   const filteredArchives = useMemo(() => {
     const query = archiveSearch.trim().toLowerCase();
 
@@ -603,9 +615,13 @@ export default function Home() {
       const project = archive.metadata.project?.trim() || "";
       const statusMatches = archiveStatusFilter === "alle" || archive.metadata.status === archiveStatusFilter;
       const projectMatches = archiveProjectFilter === "alle" || project === archiveProjectFilter;
+      const meetingTypeMatches = archiveMeetingTypeFilter === "alle"
+        || archive.metadata.meetingType === archiveMeetingTypeFilter
+        || (archiveMeetingTypeFilter === "nicht klassifiziert" && !archive.metadata.meetingType);
       const searchText = [
         archive.metadata.title,
         project,
+        getMeetingTypeLabel(archive.metadata.meetingType),
         archive.metadata.date,
         archive.metadata.status,
         archive.metadata.participants,
@@ -619,9 +635,9 @@ export default function Home() {
       ].filter(Boolean).join(" ").toLowerCase();
       const queryMatches = !query || searchText.includes(query);
 
-      return statusMatches && projectMatches && queryMatches;
+      return statusMatches && projectMatches && meetingTypeMatches && queryMatches;
     });
-  }, [archiveProjectFilter, archiveSearch, archiveStatusFilter, savedArchives]);
+  }, [archiveMeetingTypeFilter, archiveProjectFilter, archiveSearch, archiveStatusFilter, savedArchives]);
   const allArchiveActions = useMemo(() => savedArchives.flatMap((archive) => (
     archive.transcriptAnalysis?.actionPlan.map((action, index) => ({
       ...action,
@@ -1353,6 +1369,7 @@ export default function Home() {
       metadata: {
         title: currentMeetingTitle,
         project: meetingMetadata.project.trim(),
+        meetingType: meetingStartDraft.meetingType,
         date: meetingMetadata.date,
         status,
         participants: meetingMetadata.participants || agendaInput.participants || preparationInput.participants,
@@ -1505,6 +1522,7 @@ export default function Home() {
       `# ${archive.metadata.title}`,
       "",
       `Projekt: ${archive.metadata.project || "nicht zugeordnet"}`,
+      `Meeting-Typ: ${getMeetingTypeLabel(archive.metadata.meetingType)}`,
       `Datum: ${archive.metadata.date}`,
       `Status: ${archive.metadata.status}`,
       `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
@@ -1639,6 +1657,7 @@ export default function Home() {
       `# ${kind === "management" ? "Management-Protokoll" : kind === "actions" ? "Maßnahmenliste" : kind === "decision" ? "Entscheidungsnotiz" : "Projektaktenbericht"}: ${title}`,
       "",
       `Projekt: ${archive.metadata.project || "nicht zugeordnet"}`,
+      `Meeting-Typ: ${getMeetingTypeLabel(archive.metadata.meetingType)}`,
       `Datum: ${archive.metadata.date}`,
       `Status: ${archive.metadata.status}`,
       `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
@@ -1745,6 +1764,15 @@ export default function Home() {
       desiredOutcome: archive.metadata.desiredOutcome,
       status: archive.metadata.status
     });
+    setMeetingStartDraft((currentDraft) => ({
+      ...currentDraft,
+      meetingType: archive.metadata.meetingType ?? "entscheidung",
+      title: archive.metadata.title || "",
+      project: archive.metadata.project || "",
+      goal: archive.metadata.goal || "",
+      participants: archive.metadata.participants || "",
+      desiredOutcome: archive.metadata.desiredOutcome || ""
+    }));
     setAgendaInput(archive.agenda.input);
     setAgenda(archive.agenda.result);
     setPreparationInput(archive.preparation.input);
@@ -2622,10 +2650,20 @@ export default function Home() {
                     <option value="abgeschlossen">abgeschlossen</option>
                   </select>
                 </Field>
+                <Field label="Meeting-Typ">
+                  <select value={archiveMeetingTypeFilter} onChange={(event) => setArchiveMeetingTypeFilter(event.target.value as MeetingType | "alle" | "nicht klassifiziert")}>
+                    <option value="alle">alle Typen</option>
+                    {archiveMeetingTypes.map((type) => (
+                      <option key={type} value={type}>{getMeetingTypeLabel(type)}</option>
+                    ))}
+                    {savedArchives.some((archive) => !archive.metadata.meetingType) && <option value="nicht klassifiziert">nicht klassifiziert</option>}
+                  </select>
+                </Field>
               </div>
               <div className="library-summary">
                 <span>{filteredArchives.length} von {savedArchives.length} Akten sichtbar</span>
                 <span>{archiveProjects.length} Projekte</span>
+                <span>{archiveMeetingTypes.length} Meeting-Typen</span>
                 <span>{currentArchiveId ? "Wiederherstellung aktiv" : "keine Akte geladen"}</span>
               </div>
             </section>
@@ -2650,7 +2688,7 @@ export default function Home() {
                     <article className={selectedArchive?.id === archive.id ? "archive-row archive-row--selected" : "archive-row"} key={archive.id}>
                       <div>
                         <strong>{archive.metadata.title}</strong>
-                        <span>{archive.metadata.project || "ohne Projekt"} · {archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
+                        <span>{archive.metadata.project || "ohne Projekt"} · {getMeetingTypeLabel(archive.metadata.meetingType)} · {archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
                       </div>
                       <div>
                         <span>{archive.transcription.rawText ? "Transkript vorhanden" : "ohne Transkript"}</span>
@@ -2745,6 +2783,10 @@ export default function Home() {
                       <div>
                         <dt>Projekt</dt>
                         <dd>{selectedArchive.metadata.project || "nicht zugeordnet"}</dd>
+                      </div>
+                      <div>
+                        <dt>Meeting-Typ</dt>
+                        <dd>{getMeetingTypeLabel(selectedArchive.metadata.meetingType)}</dd>
                       </div>
                       <div>
                         <dt>Teilnehmer</dt>
