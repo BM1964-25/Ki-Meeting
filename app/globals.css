@@ -616,7 +616,8 @@ h3 {
 }
 
 .mic-diagnostics__header p,
-.mic-diagnostics__recommendation {
+.mic-diagnostics__recommendation,
+.mic-diagnostics__engine-note {
   color: var(--muted);
   line-height: 1.45;
   margin: 0;
@@ -658,6 +659,10 @@ h3 {
   background: #ffffff;
   border-left: 4px solid var(--primary);
   padding: 10px 12px;
+}
+
+.mic-diagnostics__engine-note {
+  font-size: 0.86rem;
 }
 
 .recording-steps {

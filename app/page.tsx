@@ -95,11 +95,14 @@ const initialPreparation: MeetingPreparationInput = {
 const createSilentWaveform = () => Array.from({ length: 48 }, () => 8);
 
 function detectBrowser(userAgent: string) {
+  if (/electron|codex/i.test(userAgent)) {
+    return "Codex In-App-Browser / Chromium";
+  }
   if (/edg\//i.test(userAgent)) {
-    return "Microsoft Edge";
+    return "Microsoft Edge / Chromium";
   }
   if (/chrome|crios/i.test(userAgent) && !/edg\//i.test(userAgent)) {
-    return "Chrome";
+    return "Chrome/Chromium-basierter Browser";
   }
   if (/safari/i.test(userAgent) && !/chrome|crios|android/i.test(userAgent)) {
     return "Safari";
@@ -136,7 +139,7 @@ function buildMicrophoneRecommendation(diagnostics: Omit<MicrophoneDiagnostics, 
       return "Safari meldet eine blockierte Berechtigung. Stelle Safari → Einstellungen → Websites → Mikrofon für 127.0.0.1 auf Fragen oder Erlauben und prüfe zusätzlich macOS Datenschutz & Sicherheit → Mikrofon.";
     }
 
-    return "Der Browser meldet eine blockierte Berechtigung. Öffne die Website-Einstellungen dieser Seite, erlaube das Mikrofon und lade die App neu.";
+    return "Der Browser meldet eine blockierte Berechtigung. Start wurde ausgeführt, aber die Aufnahme kann ohne Mikrofonfreigabe nicht beginnen. Deshalb bleiben Pause, Fortfahren und Stop deaktiviert. Öffne die Website- oder App-Einstellungen, erlaube das Mikrofon und lade die App neu.";
   }
 
   if (diagnostics.permissionState === "prompt") {
@@ -718,7 +721,7 @@ export default function Home() {
                       <>
                         <dl className="mic-diagnostics__grid">
                           <div>
-                            <dt>Browser</dt>
+                            <dt>Browser / Engine</dt>
                             <dd>{microphoneDiagnostics.browserLabel}</dd>
                           </div>
                           <div>
@@ -742,6 +745,10 @@ export default function Home() {
                             <dd>{microphoneDiagnostics.lastChecked}</dd>
                           </div>
                         </dl>
+                        <p className="mic-diagnostics__engine-note">
+                          Die Diagnose erkennt die technische Browser-Engine. Der Codex-In-App-Browser kann deshalb
+                          als Chrome/Chromium erscheinen, obwohl du nicht bewusst Chrome geöffnet hast.
+                        </p>
                         <p className="mic-diagnostics__recommendation">{microphoneDiagnostics.recommendation}</p>
                       </>
                     ) : (
