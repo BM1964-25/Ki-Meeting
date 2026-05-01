@@ -8,6 +8,7 @@ import {
   Brain,
   ClipboardCheck,
   Download,
+  FileText,
   FolderOpen,
   Mic,
   FileSearch,
@@ -122,9 +123,28 @@ const WAVEFORM_BAR_COUNT = 86;
 const FLAT_WAVEFORM_HEIGHT = 4;
 const WAVEFORM_FRAME_SKIP = 3;
 const chunkLengthOptions = [1, 5, 10] as const;
+const MEETING_ARCHIVE_STORAGE_KEY = "meeting-intelligence-ki.archives.v1";
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
+
+function loadSavedArchivesFromStorage() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedArchives = window.localStorage.getItem(MEETING_ARCHIVE_STORAGE_KEY);
+    if (!storedArchives) {
+      return [];
+    }
+
+    const parsedArchives = JSON.parse(storedArchives) as MeetingArchive[];
+    return parsedArchives.filter((archive) => archive.schemaVersion === 1 && archive.metadata);
+  } catch {
+    return [];
+  }
+}
 
 function detectBrowser(userAgent: string) {
   if (/electron|codex/i.test(userAgent)) {
@@ -238,6 +258,7 @@ export default function Home() {
   const [agendaFileStatus, setAgendaFileStatus] = useState("Noch keine Agenda-Datei geladen.");
   const [archiveStatus, setArchiveStatus] = useState("Noch keine Projektakte gespeichert oder geladen.");
   const [loadedArchiveNames, setLoadedArchiveNames] = useState<string[]>([]);
+  const [savedArchives, setSavedArchives] = useState<MeetingArchive[]>(loadSavedArchivesFromStorage);
   const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
@@ -262,9 +283,10 @@ export default function Home() {
       preparedMeetings: String((preparation ? 1 : 0) + (agenda ? 1 : 0)),
       analyzedTranscripts: transcript ? "1" : "0",
       criticalQuestions: preparation ? String(preparation.criticalQuestions.length) : "0",
-      recurringObjections: patterns ? String(patterns.recurringObjections.length) : "0"
+      recurringObjections: patterns ? String(patterns.recurringObjections.length) : "0",
+      savedArchives: String(savedArchives.length)
     }),
-    [agenda, patterns, preparation, transcript]
+    [agenda, patterns, preparation, savedArchives.length, transcript]
   );
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
@@ -678,8 +700,21 @@ export default function Home() {
     return `${date}-${slug}.meeting.json`;
   }
 
-  function downloadCurrentMeetingArchive() {
-    const archive = createCurrentMeetingArchive();
+  function persistArchives(archives: MeetingArchive[]) {
+    setSavedArchives(archives);
+    window.localStorage.setItem(MEETING_ARCHIVE_STORAGE_KEY, JSON.stringify(archives));
+  }
+
+  function storeArchiveInBrowser(archive: MeetingArchive) {
+    const nextArchives = [
+      archive,
+      ...savedArchives.filter((savedArchive) => savedArchive.id !== archive.id)
+    ].slice(0, 50);
+    persistArchives(nextArchives);
+    setArchiveStatus(`Projektakte lokal im Browser gespeichert: ${archive.metadata.title}`);
+  }
+
+  function downloadArchive(archive: MeetingArchive) {
     const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -690,6 +725,68 @@ export default function Home() {
     link.remove();
     URL.revokeObjectURL(url);
     setArchiveStatus(`Projektakte vorbereitet: ${link.download}. Die Datei wird über den Browser-Download gespeichert.`);
+  }
+
+  function saveCurrentMeetingInBrowser() {
+    storeArchiveInBrowser(createCurrentMeetingArchive());
+  }
+
+  function saveAndDownloadCurrentMeetingArchive() {
+    const archive = createCurrentMeetingArchive();
+    storeArchiveInBrowser(archive);
+    downloadArchive(archive);
+  }
+
+  function archiveToMarkdown(archive: MeetingArchive) {
+    const lines = [
+      `# ${archive.metadata.title}`,
+      "",
+      `Datum: ${archive.metadata.date}`,
+      `Status: ${archive.metadata.status}`,
+      `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
+      `Gewünschtes Ergebnis: ${archive.metadata.desiredOutcome || "nicht erfasst"}`,
+      "",
+      "## Teilnehmer",
+      archive.metadata.participants || "Nicht erfasst",
+      "",
+      "## Agenda",
+      archive.agenda.input.existingAgenda || archive.agenda.input.agendaText || "Keine Agenda erfasst.",
+      "",
+      "## Transkript",
+      archive.transcription.rawText || "Kein Transkript gespeichert.",
+      "",
+      "## Management Summary",
+      archive.transcriptAnalysis?.managementSummary || "Noch keine Analyse vorhanden.",
+      "",
+      "## Entscheidungen",
+      ...(archive.transcriptAnalysis?.decisions ?? ["Noch keine Entscheidungen gespeichert."]).map((item) => `- ${item}`),
+      "",
+      "## Maßnahmen",
+      ...(archive.transcriptAnalysis?.actionPlan ?? []).map((item) => `- ${item.task} | Owner: ${item.owner} | Frist: ${item.due} | Priorität: ${item.priority}`),
+      ...(archive.transcriptAnalysis?.actionPlan.length ? [] : ["Noch keine Maßnahmen gespeichert."]),
+      "",
+      "## Follow-up",
+      archive.transcriptAnalysis?.followUpEmailDraft || "Noch kein Follow-up-Entwurf vorhanden."
+    ];
+
+    return lines.join("\n");
+  }
+
+  function downloadArchiveMarkdown(archive: MeetingArchive) {
+    const blob = new Blob([archiveToMarkdown(archive)], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = createArchiveFileName(archive.metadata.title).replace(".meeting.json", ".md");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setArchiveStatus(`Markdown-Export vorbereitet: ${link.download}.`);
+  }
+
+  function downloadCurrentMeetingMarkdown() {
+    downloadArchiveMarkdown(createCurrentMeetingArchive());
   }
 
   function readTextFile(file: File) {
@@ -736,6 +833,7 @@ export default function Home() {
         throw new Error("Ungültiges Projektaktenformat.");
       }
       applyMeetingArchive(archive);
+      storeArchiveInBrowser(archive);
       setLoadedArchiveNames([archive.metadata.title || file.name]);
     } catch {
       setArchiveStatus("Diese Datei konnte nicht als Meeting-Projektakte gelesen werden.");
@@ -754,10 +852,33 @@ export default function Home() {
       );
       const validArchives = archives.filter((archive) => archive.schemaVersion === 1 && archive.metadata);
       setLoadedArchiveNames(validArchives.map((archive) => archive.metadata.title));
+      if (validArchives.length > 0) {
+        const importedIds = new Set(validArchives.map((archive) => archive.id));
+        persistArchives([
+          ...validArchives,
+          ...savedArchives.filter((archive) => !importedIds.has(archive.id))
+        ].slice(0, 50));
+      }
       setArchiveAnalysis(await analyzeMeetingArchives(validArchives));
       setArchiveStatus(`${validArchives.length} Projektakten für die übergreifende Analyse geladen.`);
     } catch {
       setArchiveStatus("Mindestens eine Datei konnte nicht als Meeting-Projektakte gelesen werden.");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function analyzeSavedMeetingArchives() {
+    if (savedArchives.length === 0) {
+      setArchiveStatus("Noch keine lokal gespeicherten Projektakten für eine Analyse vorhanden.");
+      return;
+    }
+
+    setLoadingAction("archiveAnalysis");
+    try {
+      setLoadedArchiveNames(savedArchives.map((archive) => archive.metadata.title));
+      setArchiveAnalysis(await analyzeMeetingArchives(savedArchives));
+      setArchiveStatus(`${savedArchives.length} lokal gespeicherte Projektakten analysiert.`);
     } finally {
       setLoadingAction(null);
     }
@@ -864,7 +985,7 @@ export default function Home() {
               <MetricCard icon={ClipboardCheck} label="Vorbereitete Meetings" value={dashboardStats.preparedMeetings} detail="in dieser Session" />
               <MetricCard icon={FileSearch} label="Analysierte Transkripte" value={dashboardStats.analyzedTranscripts} detail="lokale Eingaben" />
               <MetricCard icon={AlertTriangle} label="Offene kritische Fragen" value={dashboardStats.criticalQuestions} detail="aus Vorbereitung" />
-              <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwände" value={dashboardStats.recurringObjections} detail="aus Musteranalyse" />
+              <MetricCard icon={Archive} label="Gespeicherte Projektakten" value={dashboardStats.savedArchives} detail="lokal im Browser" />
             </div>
             <div className="grid grid--two">
               <article className="card">
@@ -912,11 +1033,19 @@ export default function Home() {
                 <Download size={24} aria-hidden="true" />
                 <div>
                   <h2>Aktuelles Meeting speichern</h2>
-                  <p>Erzeugt eine lokale Projektakte als <strong>.meeting.json</strong>.</p>
+                  <p>Speichert den Arbeitsstand im Browser und erzeugt bei Bedarf eine <strong>.meeting.json</strong>-Datei.</p>
                 </div>
-                <button className="primary-button" onClick={downloadCurrentMeetingArchive} type="button">
-                  <Download size={17} /> Projektakte speichern
-                </button>
+                <div className="archive-button-stack">
+                  <button className="primary-button" onClick={saveCurrentMeetingInBrowser} type="button">
+                    <Archive size={17} /> Im Browser speichern
+                  </button>
+                  <button className="secondary-button" onClick={saveAndDownloadCurrentMeetingArchive} type="button">
+                    <Download size={17} /> Speichern und herunterladen
+                  </button>
+                  <button className="secondary-button" onClick={downloadCurrentMeetingMarkdown} type="button">
+                    <FileText size={17} /> Als Markdown exportieren
+                  </button>
+                </div>
               </article>
 
               <article className="card archive-card">
@@ -938,15 +1067,50 @@ export default function Home() {
                   <h2>Viele Meetings analysieren</h2>
                   <p>Lade mehrere Projektakten, um wiederkehrende Einwände, Risiken und Maßnahmenmuster zu erkennen.</p>
                 </div>
-                <label className="secondary-button archive-file-button">
-                  <Files size={17} aria-hidden="true" />
-                  Mehrere Projektakten auswählen
-                  <input accept=".json,.meeting.json,application/json" multiple onChange={(event) => handleMultipleArchiveAnalysis(event.target.files)} type="file" />
-                </label>
+                <div className="archive-button-stack">
+                  <button className="primary-button" disabled={savedArchives.length === 0} onClick={analyzeSavedMeetingArchives} type="button">
+                    <Archive size={17} /> Lokale Akten analysieren
+                  </button>
+                  <label className="secondary-button archive-file-button">
+                    <Files size={17} aria-hidden="true" />
+                    Mehrere Projektakten auswählen
+                    <input accept=".json,.meeting.json,application/json" multiple onChange={(event) => handleMultipleArchiveAnalysis(event.target.files)} type="file" />
+                  </label>
+                </div>
               </article>
             </div>
 
             <p className="result-note">{archiveStatus}</p>
+            {savedArchives.length > 0 && (
+              <section className="result-block result-block--wide">
+                <h3>Lokale Meeting-Übersicht</h3>
+                <div className="archive-table">
+                  {savedArchives.map((archive) => (
+                    <article className="archive-row" key={archive.id}>
+                      <div>
+                        <strong>{archive.metadata.title}</strong>
+                        <span>{archive.metadata.date} · Status: {archive.metadata.status}</span>
+                      </div>
+                      <div>
+                        <span>{archive.transcription.rawText ? "Transkript vorhanden" : "ohne Transkript"}</span>
+                        <span>{archive.transcriptAnalysis ? "Analyse vorhanden" : "ohne Analyse"}</span>
+                      </div>
+                      <div className="archive-row__actions">
+                        <button className="secondary-button" onClick={() => applyMeetingArchive(archive)} type="button">
+                          <FolderOpen size={16} /> Öffnen
+                        </button>
+                        <button className="secondary-button" onClick={() => downloadArchive(archive)} type="button">
+                          <Download size={16} /> JSON
+                        </button>
+                        <button className="secondary-button" onClick={() => downloadArchiveMarkdown(archive)} type="button">
+                          <FileText size={16} /> Markdown
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
             {loadedArchiveNames.length > 0 && (
               <section className="result-block">
                 <h3>Geladene Projektakten</h3>
