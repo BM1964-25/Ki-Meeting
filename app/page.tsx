@@ -247,6 +247,7 @@ const WAVEFORM_FRAME_SKIP = 3;
 const chunkLengthOptions = [1, 5, 10] as const;
 const MEETING_ARCHIVE_STORAGE_KEY = "meeting-intelligence-ki.archives.v1";
 const AI_SETTINGS_STORAGE_KEY = "meeting-intelligence-ki.ai-settings.v1";
+const MEETING_SUGGESTIONS_STORAGE_KEY = "meeting-intelligence-ki.suggestions.v1";
 const OPENAI_AUDIO_UPLOAD_LIMIT_MB = 25;
 
 type AiProvider = "anthropic" | "openai";
@@ -291,6 +292,9 @@ type StoredAiSettings = {
   apiKey: string;
 };
 
+type MeetingSuggestionKey = "titles" | "projects" | "goals" | "participants" | "outcomes" | "criticalTopics" | "ownPositions" | "durations";
+type MeetingSuggestions = Record<MeetingSuggestionKey, string[]>;
+
 type ExportKind = "management" | "actions" | "decision" | "full";
 type ActionPlanItem = TranscriptAnalysisResult["actionPlan"][number];
 type ActionPlanStatus = NonNullable<ActionPlanItem["status"]>;
@@ -317,6 +321,17 @@ const createInitialMeetingStartDraft = (): MeetingStartDraft => ({
   ownPosition: "",
   duration: "60 Minuten",
   typeSpecificNotes: ""
+});
+
+const createEmptyMeetingSuggestions = (): MeetingSuggestions => ({
+  titles: [],
+  projects: [],
+  goals: [],
+  participants: [],
+  outcomes: [],
+  criticalTopics: [],
+  ownPositions: [],
+  durations: []
 });
 
 const createSilentWaveform = () =>
@@ -362,6 +377,83 @@ function loadAiSettingsFromStorage(): StoredAiSettings {
   } catch {
     return { provider: "anthropic", mode: "mock", apiKey: "" };
   }
+}
+
+function loadMeetingSuggestionsFromStorage(): MeetingSuggestions {
+  if (typeof window === "undefined") {
+    return createEmptyMeetingSuggestions();
+  }
+
+  try {
+    const storedSuggestions = window.localStorage.getItem(MEETING_SUGGESTIONS_STORAGE_KEY);
+    if (!storedSuggestions) {
+      return createEmptyMeetingSuggestions();
+    }
+
+    const parsedSuggestions = JSON.parse(storedSuggestions) as Partial<MeetingSuggestions>;
+    const emptySuggestions = createEmptyMeetingSuggestions();
+    return Object.fromEntries(
+      Object.keys(emptySuggestions).map((key) => {
+        const suggestionKey = key as MeetingSuggestionKey;
+        return [suggestionKey, Array.isArray(parsedSuggestions[suggestionKey]) ? parsedSuggestions[suggestionKey]!.filter(Boolean).slice(0, 12) : []];
+      })
+    ) as MeetingSuggestions;
+  } catch {
+    return createEmptyMeetingSuggestions();
+  }
+}
+
+type SuggestedFieldProps = {
+  label: string;
+  suggestionKey: MeetingSuggestionKey;
+  suggestions: string[];
+  value: string;
+  onChange: (value: string) => void;
+  onDeleteSuggestion: (key: MeetingSuggestionKey, value: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+  inputType?: string;
+};
+
+function SuggestedField({
+  label,
+  suggestionKey,
+  suggestions,
+  value,
+  onChange,
+  onDeleteSuggestion,
+  placeholder,
+  multiline = false,
+  inputType = "text"
+}: SuggestedFieldProps) {
+  return (
+    <div className="field suggested-field">
+      <span>{label}</span>
+      {multiline ? (
+        <textarea placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input placeholder={placeholder} type={inputType} value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
+      {suggestions.length > 0 && (
+        <div className="suggestion-controls">
+          <select aria-label={`${label} aus Vorschlägen übernehmen`} value="" onChange={(event) => event.target.value && onChange(event.target.value)}>
+            <option value="">Vorschlag übernehmen</option>
+            {suggestions.map((suggestion) => (
+              <option key={suggestion} value={suggestion}>{suggestion}</option>
+            ))}
+          </select>
+          <div className="suggestion-chips" aria-label={`${label} Vorschläge verwalten`}>
+            {suggestions.slice(0, 5).map((suggestion) => (
+              <span className="suggestion-chip" key={suggestion}>
+                <button onClick={() => onChange(suggestion)} title={suggestion} type="button">{suggestion}</button>
+                <button aria-label={`Vorschlag ${suggestion} löschen`} onClick={() => onDeleteSuggestion(suggestionKey, suggestion)} type="button">x</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function detectBrowser(userAgent: string) {
@@ -477,6 +569,7 @@ export default function Home() {
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [meetingMetadata, setMeetingMetadata] = useState<MeetingMetadataForm>(createInitialMeetingMetadata);
   const [meetingStartDraft, setMeetingStartDraft] = useState<MeetingStartDraft>(createInitialMeetingStartDraft);
+  const [meetingSuggestions, setMeetingSuggestions] = useState<MeetingSuggestions>(loadMeetingSuggestionsFromStorage);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
   const [microphoneStatus, setMicrophoneStatus] = useState<"unbekannt" | "angefragt" | "erlaubt" | "blockiert" | "nicht verfügbar">("unbekannt");
@@ -725,6 +818,55 @@ export default function Home() {
     return savedArchives.find((archive) => archive.id === selectedArchiveId) ?? filteredArchives[0] ?? null;
   }, [filteredArchives, savedArchives, selectedArchiveId]);
   const selectedArchiveTimeline = selectedArchive ? getArchiveTimeline(selectedArchive) : [];
+  const persistMeetingSuggestions = useCallback((nextSuggestions: MeetingSuggestions) => {
+    setMeetingSuggestions(nextSuggestions);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MEETING_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
+    }
+  }, []);
+  const rememberMeetingSuggestionValues = useCallback((values: Partial<Record<MeetingSuggestionKey, string | string[]>>) => {
+    setMeetingSuggestions((currentSuggestions) => {
+      const nextSuggestions = { ...currentSuggestions };
+
+      (Object.entries(values) as Array<[MeetingSuggestionKey, string | string[] | undefined]>).forEach(([key, rawValue]) => {
+        const valuesToStore = (Array.isArray(rawValue) ? rawValue : [rawValue])
+          .map((value) => value?.trim())
+          .filter((value): value is string => Boolean(value && value.length >= 3));
+
+        if (valuesToStore.length === 0) {
+          return;
+        }
+
+        const existing = nextSuggestions[key].filter((item) => !valuesToStore.some((value) => value.toLowerCase() === item.toLowerCase()));
+        nextSuggestions[key] = [...valuesToStore, ...existing].slice(0, 12);
+      });
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(MEETING_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
+      }
+
+      return nextSuggestions;
+    });
+  }, []);
+  const deleteMeetingSuggestion = useCallback((key: MeetingSuggestionKey, value: string) => {
+    const nextSuggestions = {
+      ...meetingSuggestions,
+      [key]: meetingSuggestions[key].filter((item) => item !== value)
+    };
+    persistMeetingSuggestions(nextSuggestions);
+  }, [meetingSuggestions, persistMeetingSuggestions]);
+  const rememberCurrentMeetingSuggestions = useCallback(() => {
+    rememberMeetingSuggestionValues({
+      titles: [meetingStartDraft.title, meetingMetadata.title, agendaInput.title, preparationInput.title],
+      projects: [meetingStartDraft.project, meetingMetadata.project],
+      goals: [meetingStartDraft.goal, meetingMetadata.goal, agendaInput.meetingGoal, preparationInput.goal],
+      participants: [meetingStartDraft.participants, meetingMetadata.participants, agendaInput.participants, preparationInput.participants],
+      outcomes: [meetingStartDraft.desiredOutcome, meetingMetadata.desiredOutcome, agendaInput.desiredOutcome, preparationInput.desiredOutcome],
+      criticalTopics: [meetingStartDraft.criticalTopics, preparationInput.criticalTopics],
+      ownPositions: [meetingStartDraft.ownPosition, preparationInput.ownPosition],
+      durations: [meetingStartDraft.duration, agendaInput.duration]
+    });
+  }, [agendaInput, meetingMetadata, meetingStartDraft, preparationInput, rememberMeetingSuggestionValues]);
   const qualityReview: AiQualityReview = useMemo(() => {
     const missingInputs = [
       !hasMeaningfulText(currentMeetingTitle) || currentMeetingTitle === "Neue Meeting-Akte" ? "Meeting-Titel präzisieren" : "",
@@ -1244,6 +1386,7 @@ export default function Home() {
 
   async function handlePreparation(event: FormEvent) {
     event.preventDefault();
+    rememberCurrentMeetingSuggestions();
     const approved = await requestAiConsent(
       "Meeting-Vorbereitung erzeugen",
       "Die Meeting-Ziele, Teilnehmer, Rollen, kritischen Themen und eigene Position würden im API-Modus an den verbundenen Anbieter gesendet."
@@ -1277,6 +1420,7 @@ export default function Home() {
 
   async function handleAgenda(event: FormEvent) {
     event.preventDefault();
+    rememberCurrentMeetingSuggestions();
     const approved = await requestAiConsent(
       "Agenda prüfen",
       "Agenda, Teilnehmer, Ziel, gewünschtes Ergebnis und spätere Abgleichsnotizen würden im API-Modus an den verbundenen Anbieter gesendet."
@@ -1439,6 +1583,16 @@ export default function Home() {
   }
 
   function storeArchiveInBrowser(archive: MeetingArchive) {
+    rememberMeetingSuggestionValues({
+      titles: archive.metadata.title,
+      projects: archive.metadata.project,
+      goals: archive.metadata.goal,
+      participants: archive.metadata.participants,
+      outcomes: archive.metadata.desiredOutcome,
+      criticalTopics: archive.preparation.input.criticalTopics,
+      ownPositions: archive.preparation.input.ownPosition,
+      durations: archive.agenda.input.duration
+    });
     const nextArchives = [
       archive,
       ...savedArchives.filter((savedArchive) => savedArchive.id !== archive.id)
@@ -2093,6 +2247,7 @@ export default function Home() {
   }
 
   function applyMeetingStartDraft(targetArea: AreaId = "agenda") {
+    rememberCurrentMeetingSuggestions();
     const title = meetingStartDraft.title.trim() || "Neue Meeting-Akte";
     const project = meetingStartDraft.project.trim();
     const context = meetingStartDraft.context.trim();
@@ -2373,15 +2528,9 @@ export default function Home() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Meeting-Titel">
-                  <input value={meetingStartDraft.title} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, title: event.target.value })} />
-                </Field>
-                <Field label="Projekt / Mandat">
-                  <input value={meetingStartDraft.project} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, project: event.target.value })} />
-                </Field>
-                <Field label="Dauer">
-                  <input placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, duration: event.target.value })} />
-                </Field>
+                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.title} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, title: value })} />
+                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={meetingSuggestions.projects} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.project} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, project: value })} />
+                <SuggestedField label="Dauer" suggestionKey="durations" suggestions={meetingSuggestions.durations} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, duration: value })} />
                 <section className="workflow-type-card">
                   <span>{meetingStartTemplate.label}</span>
                   <h3>Zusatzfragen für diesen Meeting-Typ</h3>
@@ -2395,21 +2544,11 @@ export default function Home() {
                 <Field label="Anlass">
                   <textarea value={meetingStartDraft.context} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, context: event.target.value })} />
                 </Field>
-                <Field label="Ziel">
-                  <textarea value={meetingStartDraft.goal} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, goal: event.target.value })} />
-                </Field>
-                <Field label="Teilnehmer und Rollen">
-                  <textarea value={meetingStartDraft.participants} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, participants: event.target.value })} />
-                </Field>
-                <Field label="Gewünschtes Ergebnis">
-                  <textarea value={meetingStartDraft.desiredOutcome} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, desiredOutcome: event.target.value })} />
-                </Field>
-                <Field label="Kritische Themen / Konflikte">
-                  <textarea value={meetingStartDraft.criticalTopics} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, criticalTopics: event.target.value })} />
-                </Field>
-                <Field label="Eigene Position">
-                  <textarea value={meetingStartDraft.ownPosition} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: event.target.value })} />
-                </Field>
+                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.goal} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, goal: value })} />
+                <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.participants} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, participants: value })} />
+                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.desiredOutcome} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, desiredOutcome: value })} />
+                <SuggestedField label="Kritische Themen / Konflikte" suggestionKey="criticalTopics" suggestions={meetingSuggestions.criticalTopics} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.criticalTopics} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, criticalTopics: value })} />
+                <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={meetingSuggestions.ownPositions} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.ownPosition} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: value })} />
                 <Field label={`Zusatzantworten: ${meetingStartTemplate.label}`}>
                   <textarea
                     placeholder={meetingStartTemplate.prompts.join("\n")}
@@ -2469,12 +2608,8 @@ export default function Home() {
                 <span className="meeting-status-pill">{meetingMetadata.status}</span>
               </div>
               <div className="meeting-file-form">
-                <Field label="Meeting-Titel">
-                  <input value={meetingMetadata.title} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, title: event.target.value })} />
-                </Field>
-                <Field label="Projekt / Mandat">
-                  <input placeholder="z. B. CRM-Rollout, Strategie 2026, Kunde A" value={meetingMetadata.project} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, project: event.target.value })} />
-                </Field>
+                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingMetadata.title} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, title: value })} />
+                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={meetingSuggestions.projects} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. CRM-Rollout, Strategie 2026, Kunde A" value={meetingMetadata.project} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, project: value })} />
                 <Field label="Datum">
                   <input type="date" value={meetingMetadata.date} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, date: event.target.value })} />
                 </Field>
@@ -2487,15 +2622,9 @@ export default function Home() {
                     <option value="abgeschlossen">abgeschlossen</option>
                   </select>
                 </Field>
-                <Field label="Teilnehmer">
-                  <textarea value={meetingMetadata.participants} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, participants: event.target.value })} />
-                </Field>
-                <Field label="Ziel">
-                  <textarea value={meetingMetadata.goal} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, goal: event.target.value })} />
-                </Field>
-                <Field label="Gewünschtes Ergebnis">
-                  <textarea value={meetingMetadata.desiredOutcome} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, desiredOutcome: event.target.value })} />
-                </Field>
+                <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.participants} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, participants: value })} />
+                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.goal} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, goal: value })} />
+                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.desiredOutcome} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, desiredOutcome: value })} />
               </div>
               <div className="button-row">
                 <button className="primary-button" onClick={saveCurrentMeetingInBrowser} type="button">
@@ -3703,21 +3832,11 @@ export default function Home() {
             </div>
 
             <form className="card form-grid" onSubmit={handleAgenda}>
-              <Field label="Meeting-Titel">
-                <input value={agendaInput.title} onChange={(event) => setAgendaInput({ ...agendaInput, title: event.target.value })} />
-              </Field>
-              <Field label="Dauer">
-                <input placeholder="z. B. 60 Minuten" value={agendaInput.duration} onChange={(event) => setAgendaInput({ ...agendaInput, duration: event.target.value })} />
-              </Field>
-              <Field label="Ziel des Meetings">
-                <textarea value={agendaInput.meetingGoal} onChange={(event) => setAgendaInput({ ...agendaInput, meetingGoal: event.target.value })} />
-              </Field>
-              <Field label="Gewünschtes Ergebnis">
-                <textarea value={agendaInput.desiredOutcome} onChange={(event) => setAgendaInput({ ...agendaInput, desiredOutcome: event.target.value })} />
-              </Field>
-              <Field label="Teilnehmer und Rollen">
-                <textarea value={agendaInput.participants} onChange={(event) => setAgendaInput({ ...agendaInput, participants: event.target.value })} />
-              </Field>
+              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={agendaInput.title} onChange={(value) => setAgendaInput({ ...agendaInput, title: value })} />
+              <SuggestedField label="Dauer" suggestionKey="durations" suggestions={meetingSuggestions.durations} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={agendaInput.duration} onChange={(value) => setAgendaInput({ ...agendaInput, duration: value })} />
+              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.meetingGoal} onChange={(value) => setAgendaInput({ ...agendaInput, meetingGoal: value })} />
+              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.desiredOutcome} onChange={(value) => setAgendaInput({ ...agendaInput, desiredOutcome: value })} />
+              <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.participants} onChange={(value) => setAgendaInput({ ...agendaInput, participants: value })} />
               <Field label="Neue Agenda-Idee">
                 <textarea placeholder="Agenda-Punkte grob skizzieren, falls noch keine fertige Agenda existiert." value={agendaInput.agendaText} onChange={(event) => setAgendaInput({ ...agendaInput, agendaText: event.target.value })} />
               </Field>
@@ -3813,27 +3932,15 @@ export default function Home() {
           <section className="section">
             <PrivacyNotice />
             <form className="card form-grid" onSubmit={handlePreparation}>
-              <Field label="Meeting-Titel">
-                <input value={preparationInput.title} onChange={(event) => setPreparationInput({ ...preparationInput, title: event.target.value })} />
-              </Field>
-              <Field label="Ziel des Meetings">
-                <input value={preparationInput.goal} onChange={(event) => setPreparationInput({ ...preparationInput, goal: event.target.value })} />
-              </Field>
-              <Field label="Teilnehmer">
-                <textarea value={preparationInput.participants} onChange={(event) => setPreparationInput({ ...preparationInput, participants: event.target.value })} />
-              </Field>
+              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.title} onChange={(value) => setPreparationInput({ ...preparationInput, title: value })} />
+              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.goal} onChange={(value) => setPreparationInput({ ...preparationInput, goal: value })} />
+              <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.participants} onChange={(value) => setPreparationInput({ ...preparationInput, participants: value })} />
               <Field label="Rollen der Teilnehmer">
                 <textarea value={preparationInput.roles} onChange={(event) => setPreparationInput({ ...preparationInput, roles: event.target.value })} />
               </Field>
-              <Field label="Gewünschtes Ergebnis">
-                <textarea value={preparationInput.desiredOutcome} onChange={(event) => setPreparationInput({ ...preparationInput, desiredOutcome: event.target.value })} />
-              </Field>
-              <Field label="Kritische Themen">
-                <textarea value={preparationInput.criticalTopics} onChange={(event) => setPreparationInput({ ...preparationInput, criticalTopics: event.target.value })} />
-              </Field>
-              <Field label="Eigene Position">
-                <textarea value={preparationInput.ownPosition} onChange={(event) => setPreparationInput({ ...preparationInput, ownPosition: event.target.value })} />
-              </Field>
+              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.desiredOutcome} onChange={(value) => setPreparationInput({ ...preparationInput, desiredOutcome: value })} />
+              <SuggestedField label="Kritische Themen" suggestionKey="criticalTopics" suggestions={meetingSuggestions.criticalTopics} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.criticalTopics} onChange={(value) => setPreparationInput({ ...preparationInput, criticalTopics: value })} />
+              <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={meetingSuggestions.ownPositions} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.ownPosition} onChange={(value) => setPreparationInput({ ...preparationInput, ownPosition: value })} />
               <div className="form-actions">
                 <button className="primary-button" type="submit"><Sparkles size={17} /> Vorbereitung erzeugen</button>
               </div>
