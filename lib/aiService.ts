@@ -781,9 +781,34 @@ export async function analyzeMeetingArchives(
   const titles = archives.map((archive) => archive.metadata.title).filter(Boolean);
   const analyzedCount = archives.filter((archive) => archive.transcriptAnalysis).length;
   const agendaCount = archives.filter((archive) => archive.agenda.result).length;
+  const typeLabels: Record<string, string> = {
+    entscheidung: "Entscheidung",
+    eskalation: "Eskalation",
+    status: "Status",
+    verhandlung: "Verhandlung",
+    strategie: "Strategie"
+  };
+  const typeCounts = archives.reduce<Record<string, number>>((counts, archive) => {
+    const type = archive.metadata.meetingType ?? "nicht klassifiziert";
+    counts[type] = (counts[type] ?? 0) + 1;
+    return counts;
+  }, {});
+  const meetingTypeDistribution = Object.entries(typeCounts)
+    .sort((first, second) => second[1] - first[1])
+    .map(([type, count]) => `${typeLabels[type] ?? "nicht klassifiziert"}: ${count} Meeting${count === 1 ? "" : "s"}`);
+  const typeSpecificPatterns = [
+    typeCounts.entscheidung ? `Entscheidungsmeetings (${typeCounts.entscheidung}) sollten auf Beschlussreife, vertagte Entscheidungen und Entscheidungsgrundlagen geprüft werden.` : "",
+    typeCounts.eskalation ? `Eskalationen (${typeCounts.eskalation}) sollten nach wiederkehrenden Blockaden, Verantwortungsunklarheiten und Eskalationspfaden ausgewertet werden.` : "",
+    typeCounts.status ? `Statusmeetings (${typeCounts.status}) sollten nach Ampellogik, Planabweichungen, offenen Ownern und Maßnahmenqualität bewertet werden.` : "",
+    typeCounts.verhandlung ? `Verhandlungen (${typeCounts.verhandlung}) sollten nach roten Linien, Zugeständnissen, Gegenleistungen und Abschlusskorridoren verglichen werden.` : "",
+    typeCounts.strategie ? `Strategiemeetings (${typeCounts.strategie}) sollten nach Zielbild, Trade-offs, priorisierten Optionen und Umsetzungsannahmen analysiert werden.` : "",
+    typeCounts["nicht klassifiziert"] ? `${typeCounts["nicht klassifiziert"]} ältere oder importierte Projektakten haben noch keinen Meeting-Typ und sollten bei Gelegenheit klassifiziert werden.` : ""
+  ].filter(Boolean);
 
   const mockResult: MultiMeetingArchiveAnalysisResult = {
     totalMeetings: archives.length,
+    meetingTypeDistribution: meetingTypeDistribution.length ? meetingTypeDistribution : ["Noch keine Meeting-Typen in den geladenen Projektakten vorhanden."],
+    typeSpecificPatterns: typeSpecificPatterns.length ? typeSpecificPatterns : ["Noch keine typbezogenen Muster ableitbar. Speichere neue Projektakten mit Meeting-Typ."],
     recurringObjections: [
       "Ressourcen- und Budgeteinwände tauchen in mehreren Projektakten als wiederkehrendes Muster auf.",
       "Entscheidungen werden häufig an fehlende Datensicherheit oder unklare Owner gekoppelt.",

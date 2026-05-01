@@ -2907,9 +2907,11 @@ export default function Home() {
                   <MetricCard icon={Archive} label="Geladene Projektakten" value={String(archiveAnalysis.totalMeetings)} detail="lokale Dateien" />
                   <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwände" value={String(archiveAnalysis.recurringObjections.length)} detail="über alle Akten" />
                   <MetricCard icon={AlertTriangle} label="Risikomuster" value={String(archiveAnalysis.repeatedRisks.length)} detail="aus Aktenanalyse" />
-                  <MetricCard icon={ClipboardCheck} label="Verbesserungen" value={String(archiveAnalysis.improvementSuggestions.length)} detail="für nächste Meetings" />
+                  <MetricCard icon={ClipboardCheck} label="Meeting-Typen" value={String(archiveAnalysis.meetingTypeDistribution.length)} detail="klassifizierte Muster" />
                 </div>
                 <div className="result-grid">
+                  <ResultSection title="Meeting-Typ-Verteilung" items={archiveAnalysis.meetingTypeDistribution} />
+                  <ResultSection title="Typbezogene Muster" items={archiveAnalysis.typeSpecificPatterns} />
                   <ResultSection title="Wiederkehrende Einwände" items={archiveAnalysis.recurringObjections} />
                   <ResultSection title="Wiederkehrende Risiken" items={archiveAnalysis.repeatedRisks} />
                   <ResultSection title="Vertagte Entscheidungen" items={archiveAnalysis.deferredDecisions} />

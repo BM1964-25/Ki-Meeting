@@ -197,6 +197,8 @@ export type MeetingActionHistoryEvent = {
 
 export type MultiMeetingArchiveAnalysisResult = {
   totalMeetings: number;
+  meetingTypeDistribution: string[];
+  typeSpecificPatterns: string[];
   recurringObjections: string[];
   repeatedRisks: string[];
   deferredDecisions: string[];
