@@ -1123,6 +1123,53 @@ export default function Home() {
     setArchiveStatus(`Projektakte lokal im Browser gespeichert: ${archive.metadata.title}`);
   }
 
+  function updateArchiveActionStatus(archiveId: string, actionIndex: number, status: ActionPlanStatus) {
+    const targetArchive = savedArchives.find((archive) => archive.id === archiveId);
+    if (!targetArchive?.transcriptAnalysis) {
+      setArchiveStatus("Status konnte nicht aktualisiert werden: Projektakte oder Maßnahmenplan fehlt.");
+      return;
+    }
+
+    const nextArchives = savedArchives.map((archive) => {
+      if (archive.id !== archiveId || !archive.transcriptAnalysis) {
+        return archive;
+      }
+
+      return {
+        ...archive,
+        savedAt: new Date().toISOString(),
+        transcriptAnalysis: {
+          ...archive.transcriptAnalysis,
+          actionPlan: archive.transcriptAnalysis.actionPlan.map((item, index) => (
+            index === actionIndex ? { ...item, status } : item
+          ))
+        },
+        timeline: [
+          ...getArchiveTimeline(archive),
+          createTimelineEvent(
+            `massnahme-status-${Date.now()}`,
+            "Maßnahmenstatus aktualisiert",
+            new Date().toISOString(),
+            "Maßnahmen",
+            status === "Erledigt" ? "erledigt" : "hinweis",
+            `Status von Maßnahme ${actionIndex + 1} wurde auf „${status}“ gesetzt.`
+          )
+        ]
+      };
+    });
+
+    persistArchives(nextArchives);
+    if (currentArchiveId === archiveId && transcript) {
+      setTranscript({
+        ...transcript,
+        actionPlan: transcript.actionPlan.map((item, index) => (
+          index === actionIndex ? { ...item, status } : item
+        ))
+      });
+    }
+    setArchiveStatus(`Maßnahmenstatus aktualisiert: ${targetArchive.metadata.title}`);
+  }
+
   function downloadArchive(archive: MeetingArchive) {
     downloadTextFile(JSON.stringify(archive, null, 2), createArchiveFileName(archive.metadata.title), "application/json");
     setArchiveStatus(`Projektakte vorbereitet: ${createArchiveFileName(archive.metadata.title)}. Die Datei wird über den Browser-Download gespeichert.`);
@@ -2154,7 +2201,19 @@ export default function Home() {
                       </div>
                       <div>
                         <dt>Status</dt>
-                        <dd>{action.status}</dd>
+                        <dd>
+                          <select
+                            aria-label={`Status für ${action.task}`}
+                            className="inline-status-select"
+                            value={action.status}
+                            onChange={(event) => updateArchiveActionStatus(action.archiveId, action.index, event.target.value as ActionPlanStatus)}
+                          >
+                            <option value="Offen">Offen</option>
+                            <option value="In Arbeit">In Arbeit</option>
+                            <option value="Erledigt">Erledigt</option>
+                            <option value="Blockiert">Blockiert</option>
+                          </select>
+                        </dd>
                       </div>
                     </dl>
                     <button className="secondary-button" onClick={() => setSelectedArchiveId(action.archiveId)} type="button">

@@ -809,6 +809,18 @@ h3 {
   margin: 0;
 }
 
+.inline-status-select {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
 .archive-table {
   display: grid;
   gap: 10px;
