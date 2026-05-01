@@ -792,7 +792,7 @@ h3 {
 .cross-action-row dl {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
 }
 
@@ -819,6 +819,105 @@ h3 {
   min-height: 36px;
   padding: 6px 8px;
   width: 100%;
+}
+
+.due-badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.due-badge--overdue {
+  background: #fde8e7;
+  color: var(--red);
+}
+
+.due-badge--soon {
+  background: #fff4d7;
+  color: #7a4b00;
+}
+
+.due-badge--planned {
+  background: #e7f6ee;
+  color: var(--green);
+}
+
+.due-badge--done,
+.due-badge--unknown {
+  background: #eef2f6;
+  color: var(--muted);
+}
+
+.project-dashboard-panel,
+.review-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.project-dashboard-panel h2,
+.review-panel h2 {
+  margin-bottom: 8px;
+}
+
+.project-dashboard-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-dashboard-card {
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.project-dashboard-card dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+}
+
+.project-dashboard-card dt,
+.action-history-item time {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.project-dashboard-card dd {
+  font-size: 1.1rem;
+  font-weight: 900;
+  margin: 0;
+}
+
+.action-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.action-history-item {
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.action-history-item p {
+  color: var(--muted);
+  margin: 0;
 }
 
 .archive-table {
@@ -2350,6 +2449,7 @@ h3 {
   .archive-detail-panel__header,
   .cross-action-panel__header,
   .cross-action-row,
+  .project-dashboard-grid,
   .archive-intro,
   .archive-grid,
   .archive-row,
@@ -2434,6 +2534,10 @@ h3 {
   }
 
   .cross-action-row dl {
+    grid-template-columns: 1fr;
+  }
+
+  .project-dashboard-card dl {
     grid-template-columns: 1fr;
   }
 

@@ -171,6 +171,7 @@ export type MeetingArchive = {
   patternAnalysis: MeetingPatternsResult | null;
   qualityReview?: AiQualityReview;
   timeline?: MeetingArchiveTimelineEvent[];
+  actionHistory?: MeetingActionHistoryEvent[];
 };
 
 export type MeetingArchiveTimelineEvent = {
@@ -180,6 +181,16 @@ export type MeetingArchiveTimelineEvent = {
   category: "Akte" | "Agenda" | "Vorbereitung" | "Audio" | "Transkript" | "Analyse" | "Entscheidung" | "Maßnahmen" | "Export";
   status: "erledigt" | "offen" | "hinweis";
   detail: string;
+};
+
+export type MeetingActionHistoryEvent = {
+  id: string;
+  timestamp: string;
+  actionIndex: number;
+  actionTask: string;
+  field: "status" | "owner" | "due" | "priority" | "task" | "risk";
+  previousValue: string;
+  nextValue: string;
 };
 
 export type MultiMeetingArchiveAnalysisResult = {

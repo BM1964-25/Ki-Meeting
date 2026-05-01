@@ -57,6 +57,7 @@ import {
   DecisionChallengeResult,
   MeetingPatternsResult,
   MeetingArchive,
+  MeetingActionHistoryEvent,
   MeetingArchiveTimelineEvent,
   MeetingPreparationInput,
   MeetingPreparationResult,
@@ -315,6 +316,41 @@ function hasMeaningfulText(value: string | undefined, minLength = 8) {
   return Boolean(value && value.trim().length >= minLength);
 }
 
+function classifyDueDate(due: string, status: ActionPlanStatus) {
+  if (status === "Erledigt") {
+    return { label: "erledigt", level: "done" as const };
+  }
+
+  const normalized = due.trim().toLowerCase();
+  const explicitDate = normalized.match(/(\d{4}-\d{2}-\d{2})|(\d{1,2}\.\d{1,2}\.\d{2,4})/);
+  let date: Date | null = null;
+
+  if (explicitDate?.[1]) {
+    date = new Date(explicitDate[1]);
+  } else if (explicitDate?.[2]) {
+    const [day, month, year] = explicitDate[2].split(".");
+    date = new Date(Number(year.length === 2 ? `20${year}` : year), Number(month) - 1, Number(day));
+  }
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return { label: "ohne klare Frist", level: "unknown" as const };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  const days = Math.round((date.getTime() - today.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { label: `${Math.abs(days)} Tage überfällig`, level: "overdue" as const };
+  }
+  if (days <= 3) {
+    return { label: `${days} Tage`, level: "soon" as const };
+  }
+
+  return { label: `${days} Tage`, level: "planned" as const };
+}
+
 export default function Home() {
   const initialAiSettings = useMemo(() => loadAiSettingsFromStorage(), []);
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
@@ -472,6 +508,7 @@ export default function Home() {
     archive.transcriptAnalysis?.actionPlan.map((action, index) => ({
       ...action,
       status: action.status ?? "Offen" as ActionPlanStatus,
+      dueState: classifyDueDate(action.due, action.status ?? "Offen"),
       archiveId: archive.id,
       archiveTitle: archive.metadata.title,
       archiveDate: archive.metadata.date,
@@ -506,8 +543,46 @@ export default function Home() {
     open: allArchiveActions.filter((action) => action.status === "Offen").length,
     inProgress: allArchiveActions.filter((action) => action.status === "In Arbeit").length,
     blocked: allArchiveActions.filter((action) => action.status === "Blockiert").length,
-    done: allArchiveActions.filter((action) => action.status === "Erledigt").length
+    done: allArchiveActions.filter((action) => action.status === "Erledigt").length,
+    overdue: allArchiveActions.filter((action) => action.dueState.level === "overdue").length,
+    soon: allArchiveActions.filter((action) => action.dueState.level === "soon").length
   }), [allArchiveActions]);
+  const projectDashboard = useMemo(() => {
+    const projects = new Map<string, {
+      project: string;
+      meetings: number;
+      openActions: number;
+      blockedActions: number;
+      openDecisions: number;
+      risks: number;
+    }>();
+
+    savedArchives.forEach((archive) => {
+      const project = archive.metadata.project?.trim() || "ohne Projekt";
+      const current = projects.get(project) ?? { project, meetings: 0, openActions: 0, blockedActions: 0, openDecisions: 0, risks: 0 };
+      const actions = archive.transcriptAnalysis?.actionPlan ?? [];
+      current.meetings += 1;
+      current.openActions += actions.filter((action) => (action.status ?? "Offen") !== "Erledigt").length;
+      current.blockedActions += actions.filter((action) => action.status === "Blockiert").length;
+      current.openDecisions += archive.transcriptAnalysis?.deferredDecisions.length ?? 0;
+      current.risks += archive.transcriptAnalysis?.openRisks.length ?? 0;
+      projects.set(project, current);
+    });
+
+    return Array.from(projects.values()).sort((first, second) => first.project.localeCompare(second.project, "de"));
+  }, [savedArchives]);
+  const reviewItems = useMemo(() => {
+    const sourceArchives = filteredArchives.length ? filteredArchives : savedArchives;
+    const openActions = allArchiveActions
+      .filter((action) => action.status !== "Erledigt")
+      .slice(0, 5)
+      .map((action) => `${action.project}: ${action.task} (${action.owner}, ${action.status})`);
+    const openRisks = sourceArchives.flatMap((archive) => archive.transcriptAnalysis?.openRisks.map((risk) => `${archive.metadata.title}: ${risk}`) ?? []).slice(0, 5);
+    const questions = sourceArchives.flatMap((archive) => archive.transcriptAnalysis?.followUpQuestions.map((question) => `${archive.metadata.title}: ${question}`) ?? []).slice(0, 5);
+    const stakeholderNotes = sourceArchives.flatMap((archive) => archive.stakeholderAnalysis?.conversationStrategy.map((item) => `${archive.metadata.title}: ${item}`) ?? []).slice(0, 5);
+
+    return { openActions, openRisks, questions, stakeholderNotes };
+  }, [allArchiveActions, filteredArchives, savedArchives]);
   const selectedArchive = useMemo(() => {
     if (!selectedArchiveId) {
       return filteredArchives[0] ?? savedArchives[0] ?? null;
@@ -1154,6 +1229,18 @@ export default function Home() {
             status === "Erledigt" ? "erledigt" : "hinweis",
             `Status von Maßnahme ${actionIndex + 1} wurde auf „${status}“ gesetzt.`
           )
+        ],
+        actionHistory: [
+          ...(archive.actionHistory ?? []),
+          {
+            id: `action-history-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            actionIndex,
+            actionTask: archive.transcriptAnalysis.actionPlan[actionIndex]?.task ?? `Maßnahme ${actionIndex + 1}`,
+            field: "status",
+            previousValue: archive.transcriptAnalysis.actionPlan[actionIndex]?.status ?? "Offen",
+            nextValue: status
+          } satisfies MeetingActionHistoryEvent
         ]
       };
     });
@@ -1397,6 +1484,22 @@ export default function Home() {
   function downloadProfessionalExport(kind: ExportKind) {
     const archive = createCurrentMeetingArchive();
     downloadArchiveProfessionalExport(archive, kind);
+  }
+
+  function exportCrossArchiveActions() {
+    const lines = [
+      "# Projektübergreifendes Maßnahmenregister",
+      "",
+      `Export: ${new Date().toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`,
+      `Umfang: ${filteredArchiveActions.length} gefilterte Maßnahmen von ${allArchiveActions.length} gesamt`,
+      "",
+      "| Projekt | Akte | Maßnahme | Owner | Frist | Fälligkeit | Priorität | Status | Risiko |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      ...filteredArchiveActions.map((action) => `| ${action.project} | ${action.archiveTitle} | ${action.task} | ${action.owner} | ${action.due} | ${action.dueState.label} | ${action.priority} | ${action.status} | ${action.risk} |`)
+    ];
+    const fileName = `${new Date().toISOString().slice(0, 10)}-massnahmenregister.md`;
+    downloadTextFile(lines.join("\n"), fileName, "text/markdown");
+    setArchiveStatus(`Projektübergreifendes Maßnahmenregister exportiert: ${fileName}`);
   }
 
   function downloadArchiveProfessionalExport(archive: MeetingArchive, kind: ExportKind) {
@@ -2138,6 +2241,8 @@ export default function Home() {
                   <span>{actionSummary.inProgress} in Arbeit</span>
                   <span>{actionSummary.blocked} blockiert</span>
                   <span>{actionSummary.done} erledigt</span>
+                  <span>{actionSummary.overdue} überfällig</span>
+                  <span>{actionSummary.soon} bald fällig</span>
                 </div>
               </div>
               <div className="action-library-controls">
@@ -2171,6 +2276,11 @@ export default function Home() {
                   </select>
                 </Field>
               </div>
+              <div className="button-row">
+                <button className="secondary-button" disabled={filteredArchiveActions.length === 0} onClick={exportCrossArchiveActions} type="button">
+                  <Download size={17} /> Gefiltertes Maßnahmenregister exportieren
+                </button>
+              </div>
               <div className="cross-action-table">
                 {filteredArchiveActions.map((action) => (
                   <article className={`cross-action-row cross-action-row--${action.status.toLowerCase().replaceAll(" ", "-")}`} key={`${action.archiveId}-${action.index}-${action.task}`}>
@@ -2194,6 +2304,10 @@ export default function Home() {
                       <div>
                         <dt>Frist</dt>
                         <dd>{action.due}</dd>
+                      </div>
+                      <div>
+                        <dt>Fälligkeit</dt>
+                        <dd><span className={`due-badge due-badge--${action.dueState.level}`}>{action.dueState.label}</span></dd>
                       </div>
                       <div>
                         <dt>Priorität</dt>
@@ -2224,6 +2338,39 @@ export default function Home() {
                 {filteredArchiveActions.length === 0 && (
                   <p className="result-note">Keine Maßnahmen passen zu den aktuellen Filtern.</p>
                 )}
+              </div>
+            </section>
+            <section className="project-dashboard-panel">
+              <div>
+                <h2>Projekt-Dashboard</h2>
+                <p className="lead">Verdichtet gespeicherte Akten nach Projekt: Meetings, offene Maßnahmen, blockierte Punkte, vertagte Entscheidungen und Risiken.</p>
+              </div>
+              <div className="project-dashboard-grid">
+                {projectDashboard.map((project) => (
+                  <article className="project-dashboard-card" key={project.project}>
+                    <h3>{project.project}</h3>
+                    <dl>
+                      <div><dt>Meetings</dt><dd>{project.meetings}</dd></div>
+                      <div><dt>Offene Maßnahmen</dt><dd>{project.openActions}</dd></div>
+                      <div><dt>Blockiert</dt><dd>{project.blockedActions}</dd></div>
+                      <div><dt>Vertagte Entscheidungen</dt><dd>{project.openDecisions}</dd></div>
+                      <div><dt>Risiken</dt><dd>{project.risks}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+                {projectDashboard.length === 0 && <p className="result-note">Noch keine Projektakten für ein Projekt-Dashboard vorhanden.</p>}
+              </div>
+            </section>
+            <section className="review-panel">
+              <div>
+                <h2>Review vor dem nächsten Meeting</h2>
+                <p className="lead">Kompakte Vorbereitung aus den aktuell gefilterten Akten: offene Maßnahmen, Risiken, Nachfragen und Stakeholder-Hinweise.</p>
+              </div>
+              <div className="result-grid">
+                <ResultSection title="Offene Maßnahmen" items={reviewItems.openActions.length ? reviewItems.openActions : ["Keine offenen Maßnahmen in der aktuellen Auswahl."]} />
+                <ResultSection title="Kritische Risiken" items={reviewItems.openRisks.length ? reviewItems.openRisks : ["Keine offenen Risiken in der aktuellen Auswahl."]} />
+                <ResultSection title="Empfohlene Nachfragen" items={reviewItems.questions.length ? reviewItems.questions : ["Keine Nachfragen in der aktuellen Auswahl."]} />
+                <ResultSection title="Stakeholder-Hinweise" items={reviewItems.stakeholderNotes.length ? reviewItems.stakeholderNotes : ["Noch keine Stakeholder-Hinweise gespeichert."]} />
               </div>
             </section>
             <div className="analysis-lane">
@@ -2419,6 +2566,23 @@ export default function Home() {
                 ) : (
                   <p className="result-note">In dieser Akte ist noch kein Maßnahmenregister vorhanden.</p>
                 )}
+
+                <section className="result-block result-block--wide">
+                  <h3>Maßnahmen-Verlauf</h3>
+                  {selectedArchive.actionHistory?.length ? (
+                    <div className="action-history-list">
+                      {selectedArchive.actionHistory.map((event) => (
+                        <article className="action-history-item" key={event.id}>
+                          <time dateTime={event.timestamp}>{new Date(event.timestamp).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</time>
+                          <strong>{event.actionTask}</strong>
+                          <p>{event.field}: {event.previousValue} → {event.nextValue}</p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="result-note">Noch keine manuellen Änderungen am Maßnahmenregister dokumentiert.</p>
+                  )}
+                </section>
 
                 <section className="result-block result-block--wide">
                   <h3>Rohtranskript</h3>
