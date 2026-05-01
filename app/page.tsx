@@ -108,6 +108,7 @@ type AreaId =
   | "workflow"
   | "record"
   | "archives"
+  | "projects"
   | "agenda"
   | "prepare"
   | "decision"
@@ -122,6 +123,7 @@ const navItems = [
   { id: "workflow", label: "Meeting starten", icon: PlayCircle },
   { id: "record", label: "Audio & Transkription", icon: Mic },
   { id: "archives", label: "Projektakten", icon: Archive },
+  { id: "projects", label: "Maßnahmen & Projekte", icon: ListChecks },
   { id: "agenda", label: "Agenda planen", icon: ListChecks },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
   { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
@@ -2061,7 +2063,8 @@ export default function Home() {
                 { title: "2. Vorbereitung", detail: "Argumente, Einwände, kritische Fragen und Antwortstrategien vorbereiten.", target: "prepare" as AreaId, icon: ClipboardCheck },
                 { title: "3. Aufnahme", detail: "Meeting aufnehmen oder Audio hochladen und Transkript erzeugen.", target: "record" as AreaId, icon: Mic },
                 { title: "4. Analyse", detail: "Rohtranskript, Entscheidungen, Risiken und Maßnahmen analysieren.", target: "transcript" as AreaId, icon: FileSearch },
-                { title: "5. Projektakte", detail: "Arbeitsstand lokal speichern, exportieren oder mehrere Meetings auswerten.", target: "archives" as AreaId, icon: Archive }
+                { title: "5. Projektakte", detail: "Arbeitsstand lokal speichern, exportieren oder gespeicherte Akten laden.", target: "archives" as AreaId, icon: Archive },
+                { title: "6. Maßnahmen", detail: "Projektübergreifendes Register, Dashboard und Review für Folge-Meetings nutzen.", target: "projects" as AreaId, icon: ListChecks }
               ].map((step) => {
                 const Icon = step.icon;
                 return (
@@ -2225,152 +2228,6 @@ export default function Home() {
                 <span>{filteredArchives.length} von {savedArchives.length} Akten sichtbar</span>
                 <span>{archiveProjects.length} Projekte</span>
                 <span>{currentArchiveId ? "Wiederherstellung aktiv" : "keine Akte geladen"}</span>
-              </div>
-            </section>
-            <section className="cross-action-panel">
-              <div className="cross-action-panel__header">
-                <div>
-                  <h2>Maßnahmen über alle Projektakten</h2>
-                  <p className="lead">
-                    Zentrales Register für offene, laufende, blockierte und erledigte Maßnahmen aus allen gespeicherten Meeting-Akten.
-                  </p>
-                </div>
-                <div className="cross-action-summary">
-                  <span>{actionSummary.total} gesamt</span>
-                  <span>{actionSummary.open} offen</span>
-                  <span>{actionSummary.inProgress} in Arbeit</span>
-                  <span>{actionSummary.blocked} blockiert</span>
-                  <span>{actionSummary.done} erledigt</span>
-                  <span>{actionSummary.overdue} überfällig</span>
-                  <span>{actionSummary.soon} bald fällig</span>
-                </div>
-              </div>
-              <div className="action-library-controls">
-                <Field label="Maßnahmensuche">
-                  <input placeholder="Maßnahme, Owner, Risiko, Akte ..." value={actionSearch} onChange={(event) => setActionSearch(event.target.value)} />
-                </Field>
-                <Field label="Projekt">
-                  <select value={actionProjectFilter} onChange={(event) => setActionProjectFilter(event.target.value)}>
-                    <option value="alle">alle Projekte</option>
-                    {archiveProjects.map((project) => (
-                      <option key={project} value={project}>{project}</option>
-                    ))}
-                    {allArchiveActions.some((action) => action.project === "ohne Projekt") && <option value="ohne Projekt">ohne Projekt</option>}
-                  </select>
-                </Field>
-                <Field label="Status">
-                  <select value={actionStatusFilter} onChange={(event) => setActionStatusFilter(event.target.value as ActionPlanStatus | "alle")}>
-                    <option value="alle">alle Status</option>
-                    <option value="Offen">Offen</option>
-                    <option value="In Arbeit">In Arbeit</option>
-                    <option value="Erledigt">Erledigt</option>
-                    <option value="Blockiert">Blockiert</option>
-                  </select>
-                </Field>
-                <Field label="Priorität">
-                  <select value={actionPriorityFilter} onChange={(event) => setActionPriorityFilter(event.target.value as ActionPlanItem["priority"] | "alle")}>
-                    <option value="alle">alle Prioritäten</option>
-                    <option value="Hoch">Hoch</option>
-                    <option value="Mittel">Mittel</option>
-                    <option value="Niedrig">Niedrig</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="button-row">
-                <button className="secondary-button" disabled={filteredArchiveActions.length === 0} onClick={exportCrossArchiveActions} type="button">
-                  <Download size={17} /> Gefiltertes Maßnahmenregister exportieren
-                </button>
-              </div>
-              <div className="cross-action-table">
-                {filteredArchiveActions.map((action) => (
-                  <article className={`cross-action-row cross-action-row--${action.status.toLowerCase().replaceAll(" ", "-")}`} key={`${action.archiveId}-${action.index}-${action.task}`}>
-                    <div>
-                      <strong>{action.task}</strong>
-                      <span>{action.risk}</span>
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>Projekt</dt>
-                        <dd>{action.project}</dd>
-                      </div>
-                      <div>
-                        <dt>Akte</dt>
-                        <dd>{action.archiveTitle}</dd>
-                      </div>
-                      <div>
-                        <dt>Owner</dt>
-                        <dd>{action.owner}</dd>
-                      </div>
-                      <div>
-                        <dt>Frist</dt>
-                        <dd>{action.due}</dd>
-                      </div>
-                      <div>
-                        <dt>Fälligkeit</dt>
-                        <dd><span className={`due-badge due-badge--${action.dueState.level}`}>{action.dueState.label}</span></dd>
-                      </div>
-                      <div>
-                        <dt>Priorität</dt>
-                        <dd>{action.priority}</dd>
-                      </div>
-                      <div>
-                        <dt>Status</dt>
-                        <dd>
-                          <select
-                            aria-label={`Status für ${action.task}`}
-                            className="inline-status-select"
-                            value={action.status}
-                            onChange={(event) => updateArchiveActionStatus(action.archiveId, action.index, event.target.value as ActionPlanStatus)}
-                          >
-                            <option value="Offen">Offen</option>
-                            <option value="In Arbeit">In Arbeit</option>
-                            <option value="Erledigt">Erledigt</option>
-                            <option value="Blockiert">Blockiert</option>
-                          </select>
-                        </dd>
-                      </div>
-                    </dl>
-                    <button className="secondary-button" onClick={() => setSelectedArchiveId(action.archiveId)} type="button">
-                      <Eye size={16} /> Akte anzeigen
-                    </button>
-                  </article>
-                ))}
-                {filteredArchiveActions.length === 0 && (
-                  <p className="result-note">Keine Maßnahmen passen zu den aktuellen Filtern.</p>
-                )}
-              </div>
-            </section>
-            <section className="project-dashboard-panel">
-              <div>
-                <h2>Projekt-Dashboard</h2>
-                <p className="lead">Verdichtet gespeicherte Akten nach Projekt: Meetings, offene Maßnahmen, blockierte Punkte, vertagte Entscheidungen und Risiken.</p>
-              </div>
-              <div className="project-dashboard-grid">
-                {projectDashboard.map((project) => (
-                  <article className="project-dashboard-card" key={project.project}>
-                    <h3>{project.project}</h3>
-                    <dl>
-                      <div><dt>Meetings</dt><dd>{project.meetings}</dd></div>
-                      <div><dt>Offene Maßnahmen</dt><dd>{project.openActions}</dd></div>
-                      <div><dt>Blockiert</dt><dd>{project.blockedActions}</dd></div>
-                      <div><dt>Vertagte Entscheidungen</dt><dd>{project.openDecisions}</dd></div>
-                      <div><dt>Risiken</dt><dd>{project.risks}</dd></div>
-                    </dl>
-                  </article>
-                ))}
-                {projectDashboard.length === 0 && <p className="result-note">Noch keine Projektakten für ein Projekt-Dashboard vorhanden.</p>}
-              </div>
-            </section>
-            <section className="review-panel">
-              <div>
-                <h2>Review vor dem nächsten Meeting</h2>
-                <p className="lead">Kompakte Vorbereitung aus den aktuell gefilterten Akten: offene Maßnahmen, Risiken, Nachfragen und Stakeholder-Hinweise.</p>
-              </div>
-              <div className="result-grid">
-                <ResultSection title="Offene Maßnahmen" items={reviewItems.openActions.length ? reviewItems.openActions : ["Keine offenen Maßnahmen in der aktuellen Auswahl."]} />
-                <ResultSection title="Kritische Risiken" items={reviewItems.openRisks.length ? reviewItems.openRisks : ["Keine offenen Risiken in der aktuellen Auswahl."]} />
-                <ResultSection title="Empfohlene Nachfragen" items={reviewItems.questions.length ? reviewItems.questions : ["Keine Nachfragen in der aktuellen Auswahl."]} />
-                <ResultSection title="Stakeholder-Hinweise" items={reviewItems.stakeholderNotes.length ? reviewItems.stakeholderNotes : ["Noch keine Stakeholder-Hinweise gespeichert."]} />
               </div>
             </section>
             <div className="analysis-lane">
@@ -2665,6 +2522,186 @@ export default function Home() {
                 <p className="result-note">Noch kein Maßnahmenregister vorhanden. Erzeuge zuerst eine Transkriptanalyse.</p>
               )}
             </div>
+          </section>
+        )}
+
+        {activeArea === "projects" && (
+          <section className="section">
+            <PrivacyNotice />
+            <section className="cross-action-panel">
+              <div className="cross-action-panel__header">
+                <div>
+                  <h2>Maßnahmen über alle Projektakten</h2>
+                  <p className="lead">
+                    Zentrales Register für offene, laufende, blockierte und erledigte Maßnahmen aus allen gespeicherten Meeting-Akten.
+                  </p>
+                </div>
+                <div className="cross-action-summary">
+                  <span>{actionSummary.total} gesamt</span>
+                  <span>{actionSummary.open} offen</span>
+                  <span>{actionSummary.inProgress} in Arbeit</span>
+                  <span>{actionSummary.blocked} blockiert</span>
+                  <span>{actionSummary.done} erledigt</span>
+                  <span>{actionSummary.overdue} überfällig</span>
+                  <span>{actionSummary.soon} bald fällig</span>
+                </div>
+              </div>
+              <div className="action-library-controls">
+                <Field label="Maßnahmensuche">
+                  <input placeholder="Maßnahme, Owner, Risiko, Akte ..." value={actionSearch} onChange={(event) => setActionSearch(event.target.value)} />
+                </Field>
+                <Field label="Projekt">
+                  <select value={actionProjectFilter} onChange={(event) => setActionProjectFilter(event.target.value)}>
+                    <option value="alle">alle Projekte</option>
+                    {archiveProjects.map((project) => (
+                      <option key={project} value={project}>{project}</option>
+                    ))}
+                    {allArchiveActions.some((action) => action.project === "ohne Projekt") && <option value="ohne Projekt">ohne Projekt</option>}
+                  </select>
+                </Field>
+                <Field label="Status">
+                  <select value={actionStatusFilter} onChange={(event) => setActionStatusFilter(event.target.value as ActionPlanStatus | "alle")}>
+                    <option value="alle">alle Status</option>
+                    <option value="Offen">Offen</option>
+                    <option value="In Arbeit">In Arbeit</option>
+                    <option value="Erledigt">Erledigt</option>
+                    <option value="Blockiert">Blockiert</option>
+                  </select>
+                </Field>
+                <Field label="Priorität">
+                  <select value={actionPriorityFilter} onChange={(event) => setActionPriorityFilter(event.target.value as ActionPlanItem["priority"] | "alle")}>
+                    <option value="alle">alle Prioritäten</option>
+                    <option value="Hoch">Hoch</option>
+                    <option value="Mittel">Mittel</option>
+                    <option value="Niedrig">Niedrig</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="button-row">
+                <button className="secondary-button" disabled={filteredArchiveActions.length === 0} onClick={exportCrossArchiveActions} type="button">
+                  <Download size={17} /> Gefiltertes Maßnahmenregister exportieren
+                </button>
+              </div>
+              <div className="cross-action-table">
+                {filteredArchiveActions.map((action) => (
+                  <article className={`cross-action-row cross-action-row--${action.status.toLowerCase().replaceAll(" ", "-")}`} key={`${action.archiveId}-${action.index}-${action.task}`}>
+                    <div>
+                      <strong>{action.task}</strong>
+                      <span>{action.risk}</span>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Projekt</dt>
+                        <dd>{action.project}</dd>
+                      </div>
+                      <div>
+                        <dt>Akte</dt>
+                        <dd>{action.archiveTitle}</dd>
+                      </div>
+                      <div>
+                        <dt>Owner</dt>
+                        <dd>{action.owner}</dd>
+                      </div>
+                      <div>
+                        <dt>Frist</dt>
+                        <dd>{action.due}</dd>
+                      </div>
+                      <div>
+                        <dt>Fälligkeit</dt>
+                        <dd><span className={`due-badge due-badge--${action.dueState.level}`}>{action.dueState.label}</span></dd>
+                      </div>
+                      <div>
+                        <dt>Priorität</dt>
+                        <dd>{action.priority}</dd>
+                      </div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>
+                          <select
+                            aria-label={`Status für ${action.task}`}
+                            className="inline-status-select"
+                            value={action.status}
+                            onChange={(event) => updateArchiveActionStatus(action.archiveId, action.index, event.target.value as ActionPlanStatus)}
+                          >
+                            <option value="Offen">Offen</option>
+                            <option value="In Arbeit">In Arbeit</option>
+                            <option value="Erledigt">Erledigt</option>
+                            <option value="Blockiert">Blockiert</option>
+                          </select>
+                        </dd>
+                      </div>
+                    </dl>
+                    <button
+                      className="secondary-button"
+                      onClick={() => {
+                        setSelectedArchiveId(action.archiveId);
+                        setActiveArea("archives");
+                      }}
+                      type="button"
+                    >
+                      <Eye size={16} /> Akte anzeigen
+                    </button>
+                  </article>
+                ))}
+                {filteredArchiveActions.length === 0 && (
+                  <p className="result-note">Keine Maßnahmen passen zu den aktuellen Filtern.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="project-dashboard-panel">
+              <div>
+                <h2>Projekt-Dashboard</h2>
+                <p className="lead">
+                  Verdichtet gespeicherte Akten nach Projekt: Meetings, offene Maßnahmen, blockierte Punkte, vertagte Entscheidungen und Risiken.
+                </p>
+              </div>
+              <div className="project-dashboard-grid">
+                {projectDashboard.map((project) => (
+                  <article className="project-dashboard-card" key={project.project}>
+                    <h3>{project.project}</h3>
+                    <dl>
+                      <div>
+                        <dt>Meetings</dt>
+                        <dd>{project.meetings}</dd>
+                      </div>
+                      <div>
+                        <dt>Offene Maßnahmen</dt>
+                        <dd>{project.openActions}</dd>
+                      </div>
+                      <div>
+                        <dt>Blockiert</dt>
+                        <dd>{project.blockedActions}</dd>
+                      </div>
+                      <div>
+                        <dt>Vertagte Entscheidungen</dt>
+                        <dd>{project.openDecisions}</dd>
+                      </div>
+                      <div>
+                        <dt>Risiken</dt>
+                        <dd>{project.risks}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+                {projectDashboard.length === 0 && <p className="result-note">Noch keine Projektakten für ein Projekt-Dashboard vorhanden.</p>}
+              </div>
+            </section>
+
+            <section className="review-panel">
+              <div>
+                <h2>Review vor dem nächsten Meeting</h2>
+                <p className="lead">
+                  Kompakte Vorbereitung aus den aktuell gefilterten Akten: offene Maßnahmen, Risiken, Nachfragen und Stakeholder-Hinweise.
+                </p>
+              </div>
+              <div className="result-grid">
+                <ResultSection title="Offene Maßnahmen" items={reviewItems.openActions.length ? reviewItems.openActions : ["Keine offenen Maßnahmen in der aktuellen Auswahl."]} />
+                <ResultSection title="Kritische Risiken" items={reviewItems.openRisks.length ? reviewItems.openRisks : ["Keine offenen Risiken in der aktuellen Auswahl."]} />
+                <ResultSection title="Empfohlene Nachfragen" items={reviewItems.questions.length ? reviewItems.questions : ["Keine Nachfragen in der aktuellen Auswahl."]} />
+                <ResultSection title="Stakeholder-Hinweise" items={reviewItems.stakeholderNotes.length ? reviewItems.stakeholderNotes : ["Noch keine Stakeholder-Hinweise gespeichert."]} />
+              </div>
+            </section>
           </section>
         )}
 
