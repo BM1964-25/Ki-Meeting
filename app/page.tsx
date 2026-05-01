@@ -195,6 +195,8 @@ export default function Home() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const waveformFrameRef = useRef(0);
+  const waveformWriteIndexRef = useRef(0);
+  const waveformHasSpeechRef = useRef(false);
   const startedAtRef = useRef<number | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [preparationInput, setPreparationInput] = useState(initialPreparation);
@@ -307,6 +309,8 @@ export default function Home() {
     audioContextRef.current = null;
     analyserRef.current = null;
     waveformFrameRef.current = 0;
+    waveformWriteIndexRef.current = 0;
+    waveformHasSpeechRef.current = false;
     setAudioLevel(0);
     setIsSpeaking(false);
     setWaveformBars(createSilentWaveform());
@@ -340,11 +344,28 @@ export default function Home() {
       waveformFrameRef.current += 1;
 
       if (waveformFrameRef.current % WAVEFORM_FRAME_SKIP === 0) {
+        if (isVoiceActive && !waveformHasSpeechRef.current) {
+          waveformHasSpeechRef.current = true;
+          waveformWriteIndexRef.current = 0;
+          setWaveformBars(createSilentWaveform());
+        }
+
         const nextHeight = isVoiceActive
           ? Math.max(12, Math.min(42, Math.round(10 + level * 0.42)))
           : FLAT_WAVEFORM_HEIGHT;
 
-        setWaveformBars((previousBars) => [...previousBars.slice(1), nextHeight]);
+        setWaveformBars((previousBars) => {
+          const nextBars = [...previousBars];
+          const writeIndex = waveformWriteIndexRef.current;
+
+          if (writeIndex < WAVEFORM_BAR_COUNT) {
+            nextBars[writeIndex] = nextHeight;
+            waveformWriteIndexRef.current = writeIndex + 1;
+            return nextBars;
+          }
+
+          return [...previousBars.slice(1), nextHeight];
+        });
       }
 
       animationFrameRef.current = requestAnimationFrame(updateMeter);
@@ -651,8 +672,11 @@ export default function Home() {
                         />
                       ))}
                     </div>
-                    <span className={isSpeaking ? "recorder-voice-chip recorder-voice-chip--active" : "recorder-voice-chip"}>
-                      {isSpeaking ? "Sprache erkannt" : "Still"}
+                    <span
+                      aria-label={isSpeaking ? "Signal aktiv, Sprache erkannt" : "Signal ruhig"}
+                      className={isSpeaking ? "recorder-voice-chip recorder-voice-chip--active" : "recorder-voice-chip"}
+                    >
+                      Signal
                     </span>
                     <span className="recorder-timer">{formatTimer(recordingSeconds)}</span>
                     <div className="recorder-controls" aria-label="Aufnahmesteuerung">
@@ -663,7 +687,7 @@ export default function Home() {
                         onClick={startRecording}
                         type="button"
                       >
-                        <PlayCircle size={15} aria-hidden="true" />
+                        <PlayCircle size={18} aria-hidden="true" />
                         Start
                       </button>
                       <button
@@ -673,7 +697,7 @@ export default function Home() {
                         onClick={pauseRecording}
                         type="button"
                       >
-                        <Pause size={15} aria-hidden="true" />
+                        <Pause size={18} aria-hidden="true" />
                         Pause
                       </button>
                       <button
@@ -683,7 +707,7 @@ export default function Home() {
                         onClick={resumeRecording}
                         type="button"
                       >
-                        <RotateCcw size={15} aria-hidden="true" />
+                        <RotateCcw size={18} aria-hidden="true" />
                         Fortfahren
                       </button>
                       <button
@@ -693,7 +717,7 @@ export default function Home() {
                         onClick={stopRecording}
                         type="button"
                       >
-                        <Square size={14} aria-hidden="true" />
+                        <Square size={17} aria-hidden="true" />
                         Stop
                       </button>
                     </div>
@@ -711,6 +735,11 @@ export default function Home() {
                   <p className="recorder-helper">
                     Start beginnt die Aufnahme. Pause unterbricht sie, Fortfahren setzt sie fort, Stop beendet sie.
                     Transkribieren wird aktiv, sobald eine Aufnahme vorhanden ist.
+                  </p>
+                  <p className="recording-limit-note">
+                    Aufnahmelänge: In dieser lokalen Browser-Version gibt es kein festes App-Limit. Praktisch begrenzen
+                    Browser-Speicher, Arbeitsspeicher und Geräteleistung die Dauer; für stabile Arbeit sind kürzere
+                    Blöcke bis etwa 60 Minuten sinnvoll.
                   </p>
                   <div className="recording-header">
                     <span className={`recording-status recording-status--${recordingState}`}>
