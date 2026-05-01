@@ -50,6 +50,7 @@ button {
 .sidebar {
   background: #111827;
   color: #f8fafc;
+  overflow-y: auto;
   padding: 28px 20px;
   position: sticky;
   top: 0;
@@ -118,7 +119,21 @@ button {
 
 .nav-list {
   display: grid;
+  gap: 16px;
+}
+
+.nav-group {
+  display: grid;
   gap: 6px;
+}
+
+.nav-group__label {
+  color: #8fa3b8;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 0 10px 2px;
+  text-transform: uppercase;
 }
 
 .nav-button {
@@ -160,8 +175,13 @@ button {
 }
 
 .app-shell--nav-collapsed .brand__text,
+.app-shell--nav-collapsed .nav-group__label,
 .app-shell--nav-collapsed .nav-button__label {
   display: none;
+}
+
+.app-shell--nav-collapsed .nav-list {
+  gap: 12px;
 }
 
 .app-shell--nav-collapsed .sidebar-toggle {

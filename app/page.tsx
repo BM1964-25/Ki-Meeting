@@ -136,6 +136,25 @@ const navItems = [
   { id: "settings", label: "Einstellungen", icon: Settings }
 ] as const;
 
+const navGroups = [
+  {
+    label: "Start",
+    items: ["dashboard", "workflow"]
+  },
+  {
+    label: "Vorbereiten",
+    items: ["agenda", "prepare", "simulate", "decision", "stakeholder"]
+  },
+  {
+    label: "Durchführen",
+    items: ["record", "transcript"]
+  },
+  {
+    label: "Steuern & Reporting",
+    items: ["archives", "projects", "patterns", "reports", "settings"]
+  }
+] as const satisfies Array<{ label: string; items: readonly AreaId[] }>;
+
 const initialPreparation: MeetingPreparationInput = {
   title: "",
   goal: "",
@@ -1897,23 +1916,33 @@ export default function Home() {
           <Menu size={21} aria-hidden="true" />
         </button>
         <nav className="nav-list" aria-label="Hauptbereiche">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={activeArea === item.id ? "nav-button nav-button--active" : "nav-button"}
-                key={item.id}
-                onClick={() => setActiveArea(item.id)}
-                title={isSidebarCollapsed ? item.label : undefined}
-                type="button"
-              >
-                <span className="nav-button__icon">
-                  <Icon size={18} aria-hidden="true" />
-                </span>
-                <span className="nav-button__label">{item.label}</span>
-              </button>
-            );
-          })}
+          {navGroups.map((group) => (
+            <section className="nav-group" key={group.label} aria-label={group.label}>
+              <span className="nav-group__label">{group.label}</span>
+              {group.items.map((itemId) => {
+                const item = navItems.find((navItem) => navItem.id === itemId);
+                if (!item) {
+                  return null;
+                }
+
+                const Icon = item.icon;
+                return (
+                  <button
+                    className={activeArea === item.id ? "nav-button nav-button--active" : "nav-button"}
+                    key={item.id}
+                    onClick={() => setActiveArea(item.id)}
+                    title={isSidebarCollapsed ? `${group.label}: ${item.label}` : undefined}
+                    type="button"
+                  >
+                    <span className="nav-button__icon">
+                      <Icon size={18} aria-hidden="true" />
+                    </span>
+                    <span className="nav-button__label">{item.label}</span>
+                  </button>
+                );
+              })}
+            </section>
+          ))}
         </nav>
       </aside>
 
