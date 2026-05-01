@@ -901,6 +901,89 @@ h3 {
   margin: 0;
 }
 
+.report-hero {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.report-readiness {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-top: 18px;
+}
+
+.report-readiness p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.report-export-panel,
+.analysis-map-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.report-export-panel h2,
+.analysis-map-panel h2 {
+  margin-bottom: 8px;
+}
+
+.report-export-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+}
+
+.report-export-button {
+  justify-content: flex-start;
+  min-height: 54px;
+  width: 100%;
+}
+
+.analysis-map-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.analysis-map-card {
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.analysis-map-card svg {
+  color: var(--primary);
+}
+
+.analysis-map-card span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.analysis-map-card h3 {
+  margin: 0;
+}
+
+.analysis-map-card p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
 .action-history-list {
   display: grid;
   gap: 10px;
@@ -2450,6 +2533,10 @@ h3 {
   .cross-action-panel__header,
   .cross-action-row,
   .project-dashboard-grid,
+  .report-hero,
+  .report-readiness,
+  .report-export-grid,
+  .analysis-map-grid,
   .archive-intro,
   .archive-grid,
   .archive-row,

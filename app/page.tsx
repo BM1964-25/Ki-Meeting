@@ -109,6 +109,7 @@ type AreaId =
   | "record"
   | "archives"
   | "projects"
+  | "reports"
   | "agenda"
   | "prepare"
   | "decision"
@@ -124,6 +125,7 @@ const navItems = [
   { id: "record", label: "Audio & Transkription", icon: Mic },
   { id: "archives", label: "Projektakten", icon: Archive },
   { id: "projects", label: "Maßnahmen & Projekte", icon: ListChecks },
+  { id: "reports", label: "Reporting & Export", icon: FileText },
   { id: "agenda", label: "Agenda planen", icon: ListChecks },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
   { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
@@ -2064,7 +2066,8 @@ export default function Home() {
                 { title: "3. Aufnahme", detail: "Meeting aufnehmen oder Audio hochladen und Transkript erzeugen.", target: "record" as AreaId, icon: Mic },
                 { title: "4. Analyse", detail: "Rohtranskript, Entscheidungen, Risiken und Maßnahmen analysieren.", target: "transcript" as AreaId, icon: FileSearch },
                 { title: "5. Projektakte", detail: "Arbeitsstand lokal speichern, exportieren oder gespeicherte Akten laden.", target: "archives" as AreaId, icon: Archive },
-                { title: "6. Maßnahmen", detail: "Projektübergreifendes Register, Dashboard und Review für Folge-Meetings nutzen.", target: "projects" as AreaId, icon: ListChecks }
+                { title: "6. Maßnahmen", detail: "Projektübergreifendes Register, Dashboard und Review für Folge-Meetings nutzen.", target: "projects" as AreaId, icon: ListChecks },
+                { title: "7. Reporting", detail: "Management-Berichte, Maßnahmenlisten und Entscheidungsnotizen exportieren.", target: "reports" as AreaId, icon: FileText }
               ].map((step) => {
                 const Icon = step.icon;
                 return (
@@ -2702,6 +2705,185 @@ export default function Home() {
                 <ResultSection title="Stakeholder-Hinweise" items={reviewItems.stakeholderNotes.length ? reviewItems.stakeholderNotes : ["Noch keine Stakeholder-Hinweise gespeichert."]} />
               </div>
             </section>
+          </section>
+        )}
+
+        {activeArea === "reports" && (
+          <section className="section">
+            <PrivacyNotice />
+            <div className="report-hero">
+              <article className="card">
+                <h2>Reporting & Export</h2>
+                <p className="lead">
+                  Bündelt Vorbereitung, Entscheidungsschärfung, Simulation, Transkriptanalyse, Stakeholderanalyse und Maßnahmen in exportierbare Management-Unterlagen.
+                </p>
+                <div className="report-readiness">
+                  <div className={`quality-score quality-score--${qualityReview.level.toLowerCase()}`}>
+                    <span>{qualityReview.score}/100</span>
+                    <strong>Berichtsreife {qualityReview.level}</strong>
+                  </div>
+                  <p>
+                    {qualityReview.missingInputs.length
+                      ? `${qualityReview.missingInputs.length} Punkte sollten vor einem belastbaren Export noch ergänzt werden.`
+                      : "Die aktuelle Akte ist für einen Management-Export vorbereitet."}
+                  </p>
+                </div>
+              </article>
+              <article className="card">
+                <h2>Welche Analyse gehört wohin?</h2>
+                <p className="lead">
+                  Simulation und Stakeholderanalyse stärken die Vorbereitung. Entscheidungsprüfung reduziert blinde Flecken vor Beschlüssen.
+                  Transkriptanalyse verdichtet die Nachbereitung und speist Maßnahmen, Risiken und Exporte.
+                </p>
+              </article>
+            </div>
+
+            <section className="report-export-panel">
+              <div>
+                <h2>Berichtspaket aktuelle Akte</h2>
+                <p className="lead">Erzeuge Unterlagen aus dem aktuellen Arbeitsstand, auch wenn die Akte noch nicht als Datei gespeichert wurde.</p>
+              </div>
+              <div className="report-export-grid">
+                <button className="secondary-button report-export-button" onClick={() => downloadProfessionalExport("management")} type="button">
+                  <FileText size={18} /> Management-Protokoll
+                </button>
+                <button className="secondary-button report-export-button" onClick={() => downloadProfessionalExport("actions")} type="button">
+                  <ListChecks size={18} /> Maßnahmenliste
+                </button>
+                <button className="secondary-button report-export-button" onClick={() => downloadProfessionalExport("decision")} type="button">
+                  <ShieldQuestion size={18} /> Entscheidungsnotiz
+                </button>
+                <button className="secondary-button report-export-button" onClick={() => downloadProfessionalExport("full")} type="button">
+                  <Archive size={18} /> Projektaktenbericht
+                </button>
+              </div>
+            </section>
+
+            <section className="report-export-panel">
+              <div>
+                <h2>Projektübergreifende Auswertungen</h2>
+                <p className="lead">Nutze gespeicherte Projektakten für Maßnahmenregister, Musteranalyse und Review vor Folge-Meetings.</p>
+              </div>
+              <div className="report-export-grid">
+                <button className="secondary-button report-export-button" disabled={filteredArchiveActions.length === 0} onClick={exportCrossArchiveActions} type="button">
+                  <Download size={18} /> Maßnahmenregister exportieren
+                </button>
+                <button className="secondary-button report-export-button" disabled={filteredArchives.length === 0} onClick={analyzeFilteredMeetingArchives} type="button">
+                  <FileSearch size={18} /> Gefilterte Akten analysieren
+                </button>
+                <button className="secondary-button report-export-button" disabled={savedArchives.length === 0} onClick={analyzeSavedMeetingArchives} type="button">
+                  <BarChart3 size={18} /> Alle lokalen Akten analysieren
+                </button>
+                <button className="secondary-button report-export-button" onClick={() => setActiveArea("projects")} type="button">
+                  <ListChecks size={18} /> Maßnahmen-Cockpit öffnen
+                </button>
+              </div>
+              {loadingAction === "archiveAnalysis" && <LoadingIndicator label="KI analysiert mehrere Projektakten ..." />}
+            </section>
+
+            <section className="report-export-panel">
+              <div>
+                <h2>Ausgewählte Projektakte</h2>
+                <p className="lead">
+                  {selectedArchive
+                    ? `${selectedArchive.metadata.title} · ${selectedArchive.metadata.project || "ohne Projekt"}`
+                    : "Noch keine Projektakte ausgewählt oder gespeichert."}
+                </p>
+              </div>
+              <div className="report-export-grid">
+                <button
+                  className="secondary-button report-export-button"
+                  disabled={!selectedArchive}
+                  onClick={() => selectedArchive && downloadArchiveProfessionalExport(selectedArchive, "management")}
+                  type="button"
+                >
+                  <FileText size={18} /> Management
+                </button>
+                <button
+                  className="secondary-button report-export-button"
+                  disabled={!selectedArchive}
+                  onClick={() => selectedArchive && downloadArchiveProfessionalExport(selectedArchive, "actions")}
+                  type="button"
+                >
+                  <ListChecks size={18} /> Maßnahmen
+                </button>
+                <button
+                  className="secondary-button report-export-button"
+                  disabled={!selectedArchive}
+                  onClick={() => selectedArchive && downloadArchiveProfessionalExport(selectedArchive, "decision")}
+                  type="button"
+                >
+                  <ShieldQuestion size={18} /> Entscheidung
+                </button>
+                <button className="secondary-button report-export-button" onClick={() => setActiveArea("archives")} type="button">
+                  <Archive size={18} /> Projektakte auswählen
+                </button>
+              </div>
+            </section>
+
+            <section className="analysis-map-panel">
+              <div>
+                <h2>Analyse-Landkarte</h2>
+                <p className="lead">Diese Module bleiben eigene Arbeitsräume, liefern aber gezielt Bausteine für Bericht, Review und Projektakte.</p>
+              </div>
+              <div className="analysis-map-grid">
+                {[
+                  {
+                    title: "Meeting simulieren",
+                    phase: "Vor dem Meeting",
+                    detail: "Erzeugt Best Case, Worst Case und Most Likely, um kritische Wendepunkte und passende Antworten vorzubereiten.",
+                    target: "simulate" as AreaId,
+                    icon: PlayCircle
+                  },
+                  {
+                    title: "Entscheidung prüfen",
+                    phase: "Vor Beschluss oder Freigabe",
+                    detail: "Prüft Schwachstellen, unbequeme Fragen und Gegenargumente aus unterschiedlichen Rollen.",
+                    target: "decision" as AreaId,
+                    icon: ShieldQuestion
+                  },
+                  {
+                    title: "Transkript analysieren",
+                    phase: "Nach dem Meeting",
+                    detail: "Extrahiert Entscheidungen, offene Punkte, nicht angesprochene Themen, Risiken, Maßnahmen und Follow-up-Entwurf.",
+                    target: "transcript" as AreaId,
+                    icon: FileSearch
+                  },
+                  {
+                    title: "Stakeholder analysieren",
+                    phase: "Vor schwierigen Gesprächen",
+                    detail: "Verdichtet eingegebene Informationen zu Interessen, Triggern, Sprachmustern und Gesprächsstrategie.",
+                    target: "stakeholder" as AreaId,
+                    icon: Users
+                  }
+                ].map((module) => {
+                  const Icon = module.icon;
+                  return (
+                    <article className="analysis-map-card" key={module.title}>
+                      <Icon size={22} aria-hidden="true" />
+                      <span>{module.phase}</span>
+                      <h3>{module.title}</h3>
+                      <p>{module.detail}</p>
+                      <button className="secondary-button" onClick={() => setActiveArea(module.target)} type="button">
+                        Modul öffnen
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="result-grid">
+              <ResultSection title="Vor Export prüfen" items={qualityReview.recommendedNextChecks} />
+              <ResultSection title="Fehlende Eingaben" items={qualityReview.missingInputs.length ? qualityReview.missingInputs : ["Keine zentralen Lücken erkannt."]} />
+              <ResultSection title="Belastbarkeit" items={qualityReview.reliabilityNotes} />
+              <ResultSection title="Aktueller Datenstand" items={[
+                `${savedArchives.length} gespeicherte Projektakten`,
+                `${filteredArchiveActions.length} sichtbare Maßnahmen im Register`,
+                transcript ? "Transkriptanalyse vorhanden" : "Noch keine Transkriptanalyse vorhanden",
+                decision ? "Entscheidungsprüfung vorhanden" : "Noch keine Entscheidungsprüfung vorhanden"
+              ]} />
+            </div>
           </section>
         )}
 
