@@ -182,6 +182,7 @@ export default function Home() {
   const [recordingError, setRecordingError] = useState("");
   const [recordingMode, setRecordingMode] = useState<"standard" | "long">("standard");
   const [chunkLengthMinutes, setChunkLengthMinutes] = useState<(typeof chunkLengthOptions)[number]>(5);
+  const [transcriptionNotice, setTranscriptionNotice] = useState("Noch kein Audio für die Transkription vorhanden.");
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<MicrophoneDiagnostics | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
   const [loadingAction, setLoadingAction] = useState<
@@ -394,6 +395,7 @@ export default function Home() {
       stopLevelMeter();
       setTranscription(null);
       setRecordingError("");
+      setTranscriptionNotice("Aufnahme läuft. Nach Stop kann die Audiodatei transkribiert werden.");
       setAudioBlob(null);
       setAudioFileName("");
       setWaveformBars(createSilentWaveform());
@@ -508,17 +510,21 @@ export default function Home() {
     setRecordingState("ready");
     setRecordingError("");
     setTranscription(null);
+    setTranscriptionNotice("Audiodatei ist bereit. Klicke auf „Transkription erzeugen“.");
   }
 
   async function handleTranscription() {
     if (!audioBlob) {
+      setTranscriptionNotice("Bitte zuerst eine Aufnahme stoppen oder eine Audiodatei hochladen.");
       return;
     }
     setLoadingAction("transcription");
+    setTranscriptionNotice("Transkription wird erzeugt. Aktuell nutzt die App noch eine Mock-Transkription.");
     try {
       const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel);
       setTranscription(result);
       setTranscriptText(result.transcript);
+      setTranscriptionNotice("Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen.");
     } finally {
       setLoadingAction(null);
     }
@@ -957,28 +963,37 @@ export default function Home() {
                 {loadingAction === "transcription" && <LoadingIndicator label="Transkription wird erzeugt ..." />}
               </article>
             </div>
-            {loadingAction === "transcription" && <LoadingIndicator label="KI arbeitet am Transkript ..." />}
-            {transcription && (
-              <div className="result-grid">
+            <section className="transcription-workspace">
+              <div className="transcription-workspace__header">
+                <div>
+                  <h2>Transkript-Ausgabe</h2>
+                  <p>Hier erscheint der transkribierte Text. Er wird zusätzlich in den Bereich „Transkript analysieren“ übernommen.</p>
+                </div>
+                <span className={transcription ? "transcription-status transcription-status--ready" : "transcription-status"}>
+                  {transcription ? "Transkript bereit" : "Wartet auf Audio"}
+                </span>
+              </div>
+              <p className="result-note">
+                {transcriptionNotice}
+              </p>
+              {loadingAction === "transcription" && <LoadingIndicator label="KI arbeitet am Transkript ..." />}
+              <div className="transcription-layout">
                 <section className="result-block">
                   <h3>Transkriptionsstatus</h3>
-                  <p><strong>Quelle:</strong> {transcription.sourceLabel}</p>
-                  <p><strong>Dauer:</strong> {transcription.durationLabel}</p>
-                  <p><strong>Qualität:</strong> {transcription.confidence}</p>
+                  <p><strong>Quelle:</strong> {transcription?.sourceLabel ?? "keine Audiodatei ausgewählt"}</p>
+                  <p><strong>Dauer:</strong> {transcription?.durationLabel ?? "noch unbekannt"}</p>
+                  <p><strong>Qualität:</strong> {transcription?.confidence ?? "noch nicht erzeugt"}</p>
+                  <p><strong>Hinweis:</strong> Die aktuelle Version erzeugt ein Mock-Transkript. Eine echte Audio-zu-Text-API ist noch nicht angebunden.</p>
                 </section>
-                <section className="result-block">
-                  <h3>Erzeugtes Transkript</h3>
-                  <p className="result-note">
-                    Dieses Transkript wird hier angezeigt und wurde automatisch in das Textfeld im Bereich
-                    „Transkript analysieren“ übernommen.
-                  </p>
-                  <p>{transcription.transcript}</p>
-                  <button className="secondary-button" onClick={() => setActiveArea("transcript")} type="button">
+                <section className="result-block result-block--wide">
+                  <h3>Rohtranskript</h3>
+                  <pre className="transcript-raw">{transcription?.transcript ?? "Noch kein Transkript vorhanden. Stoppe eine Aufnahme oder lade eine Audiodatei hoch und starte danach die Transkription."}</pre>
+                  <button className="secondary-button" disabled={!transcription} onClick={() => setActiveArea("transcript")} type="button">
                     <FileSearch size={17} /> In Transkriptanalyse öffnen
                   </button>
                 </section>
               </div>
-            )}
+            </section>
           </section>
         )}
 
