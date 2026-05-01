@@ -638,6 +638,14 @@ h3 {
   margin: 0;
 }
 
+.file-system-status {
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  padding: 10px 12px;
+}
+
 .archive-button-stack {
   display: grid;
   gap: 9px;

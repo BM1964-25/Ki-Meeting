@@ -16,6 +16,7 @@ import {
   FileSearch,
   Files,
   Gauge,
+  HardDrive,
   ListChecks,
   Menu,
   MessageSquareText,
@@ -66,6 +67,29 @@ import {
 } from "@/types/ai";
 
 type MicrophonePermissionState = PermissionState | "unbekannt" | "nicht unterstützt";
+
+type FileSystemWritableFileStream = WritableStream & {
+  write: (data: BlobPart) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+type FileSystemFileHandle = {
+  kind: "file";
+  name: string;
+  getFile: () => Promise<File>;
+  createWritable: () => Promise<FileSystemWritableFileStream>;
+};
+
+type FileSystemDirectoryHandle = {
+  kind: "directory";
+  name: string;
+  values: () => AsyncIterable<FileSystemFileHandle | FileSystemDirectoryHandle>;
+  getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandle>;
+};
+
+type FileSystemAccessWindow = Window & {
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+};
 
 type MicrophoneDiagnostics = {
   browserLabel: string;
@@ -343,6 +367,8 @@ export default function Home() {
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
+  const [fileSystemDirectoryHandle, setFileSystemDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [fileSystemStatus, setFileSystemStatus] = useState("Noch kein lokaler Ordner verbunden.");
   const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
@@ -401,6 +427,7 @@ export default function Home() {
   const completedChunkCount = recordingMode === "long"
     ? Math.max(0, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)))
     : 0;
+  const isFileSystemAccessSupported = typeof window !== "undefined" && "showDirectoryPicker" in window;
   const archiveProjects = useMemo(() => {
     const projects = savedArchives
       .map((archive) => archive.metadata.project?.trim())
@@ -1070,6 +1097,83 @@ export default function Home() {
     downloadArchiveMarkdown(createCurrentMeetingArchive());
   }
 
+  async function connectLocalArchiveFolder() {
+    const picker = (window as FileSystemAccessWindow).showDirectoryPicker;
+    if (!picker) {
+      setFileSystemStatus("Dieser Browser unterstützt keine direkte Ordnerablage. Nutze Download und Datei-Upload als Fallback.");
+      return;
+    }
+
+    try {
+      const directoryHandle = await picker();
+      setFileSystemDirectoryHandle(directoryHandle);
+      setFileSystemStatus(`Lokaler Ordner verbunden: ${directoryHandle.name}`);
+    } catch (error) {
+      const message = error instanceof Error && error.name === "AbortError"
+        ? "Ordnerauswahl abgebrochen."
+        : "Ordner konnte nicht verbunden werden.";
+      setFileSystemStatus(message);
+    }
+  }
+
+  async function saveCurrentMeetingToLocalFolder() {
+    if (!fileSystemDirectoryHandle) {
+      setFileSystemStatus("Bitte zuerst einen lokalen Ordner verbinden.");
+      return;
+    }
+
+    const archive = createCurrentMeetingArchive();
+    const fileName = createArchiveFileName(archive.metadata.title);
+
+    try {
+      const fileHandle = await fileSystemDirectoryHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(archive, null, 2));
+      await writable.close();
+      storeArchiveInBrowser(archive);
+      setFileSystemStatus(`Projektakte im Ordner gespeichert: ${fileName}`);
+    } catch {
+      setFileSystemStatus("Projektakte konnte nicht in den verbundenen Ordner geschrieben werden.");
+    }
+  }
+
+  async function loadMeetingArchivesFromLocalFolder() {
+    if (!fileSystemDirectoryHandle) {
+      setFileSystemStatus("Bitte zuerst einen lokalen Ordner verbinden.");
+      return;
+    }
+
+    try {
+      const importedArchives: MeetingArchive[] = [];
+      for await (const entry of fileSystemDirectoryHandle.values()) {
+        if (entry.kind !== "file" || !entry.name.endsWith(".meeting.json")) {
+          continue;
+        }
+
+        const file = await entry.getFile();
+        const archive = JSON.parse(await readTextFile(file)) as MeetingArchive;
+        if (archive.schemaVersion === 1 && archive.metadata) {
+          importedArchives.push(archive);
+        }
+      }
+
+      if (importedArchives.length === 0) {
+        setFileSystemStatus("Im verbundenen Ordner wurden keine .meeting.json-Projektakten gefunden.");
+        return;
+      }
+
+      const importedIds = new Set(importedArchives.map((archive) => archive.id));
+      persistArchives([
+        ...importedArchives,
+        ...savedArchives.filter((archive) => !importedIds.has(archive.id))
+      ].slice(0, 50));
+      setLoadedArchiveNames(importedArchives.map((archive) => archive.metadata.title));
+      setFileSystemStatus(`${importedArchives.length} Projektakten aus dem Ordner geladen.`);
+    } catch {
+      setFileSystemStatus("Projektakten konnten nicht aus dem verbundenen Ordner gelesen werden.");
+    }
+  }
+
   function archiveToProfessionalExport(archive: MeetingArchive, kind: ExportKind) {
     const title = archive.metadata.title;
     const analysis = archive.transcriptAnalysis;
@@ -1697,6 +1801,31 @@ export default function Home() {
                     <ShieldQuestion size={17} /> Entscheidungsnotiz
                   </button>
                 </div>
+              </article>
+
+              <article className="card archive-card">
+                <HardDrive size={24} aria-hidden="true" />
+                <div>
+                  <h2>Lokalen Ordner verbinden</h2>
+                  <p>
+                    Speichert und lädt Projektakten direkt aus einem ausgewählten Ordner, sofern der Browser
+                    die File System Access API unterstützt.
+                  </p>
+                </div>
+                <div className="archive-button-stack">
+                  <button className="primary-button" disabled={!isFileSystemAccessSupported} onClick={connectLocalArchiveFolder} type="button">
+                    <FolderOpen size={17} /> Ordner auswählen
+                  </button>
+                  <button className="secondary-button" disabled={!fileSystemDirectoryHandle} onClick={saveCurrentMeetingToLocalFolder} type="button">
+                    <HardDrive size={17} /> Akte in Ordner speichern
+                  </button>
+                  <button className="secondary-button" disabled={!fileSystemDirectoryHandle} onClick={loadMeetingArchivesFromLocalFolder} type="button">
+                    <Files size={17} /> Akten aus Ordner laden
+                  </button>
+                </div>
+                <p className="file-system-status">
+                  {isFileSystemAccessSupported ? fileSystemStatus : "Direkte Ordnerablage wird in diesem Browser nicht unterstützt. Download/Upload bleibt verfügbar."}
+                </p>
               </article>
 
               <article className="card archive-card">
