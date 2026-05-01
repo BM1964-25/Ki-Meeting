@@ -3,12 +3,15 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   Brain,
   ClipboardCheck,
   Download,
+  FolderOpen,
   Mic,
   FileSearch,
+  Files,
   Gauge,
   ListChecks,
   MessageSquareText,
@@ -31,6 +34,7 @@ import { ResultSection } from "@/components/ResultSection";
 import { RiskBadge } from "@/components/RiskBadge";
 import {
   analyzeMeetingPatterns,
+  analyzeMeetingArchives,
   analyzeStakeholder,
   analyzeTranscript,
   generateAgendaWorkflow,
@@ -44,9 +48,11 @@ import {
   AgendaResult,
   DecisionChallengeResult,
   MeetingPatternsResult,
+  MeetingArchive,
   MeetingPreparationInput,
   MeetingPreparationResult,
   MeetingScenario,
+  MultiMeetingArchiveAnalysisResult,
   StakeholderAnalysisResult,
   TranscriptionResult,
   TranscriptAnalysisResult
@@ -67,6 +73,7 @@ type MicrophoneDiagnostics = {
 type AreaId =
   | "dashboard"
   | "record"
+  | "archives"
   | "agenda"
   | "prepare"
   | "decision"
@@ -79,6 +86,7 @@ type AreaId =
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
   { id: "record", label: "Audio & Transkription", icon: Mic },
+  { id: "archives", label: "Projektakten", icon: Archive },
   { id: "agenda", label: "Agenda planen", icon: ListChecks },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
   { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
@@ -207,6 +215,7 @@ export default function Home() {
     | null
     | "preparation"
     | "agenda"
+    | "archiveAnalysis"
     | "decision"
     | "simulation"
     | "transcript"
@@ -227,6 +236,9 @@ export default function Home() {
   const [agendaInput, setAgendaInput] = useState(initialAgenda);
   const [agenda, setAgenda] = useState<AgendaResult | null>(null);
   const [agendaFileStatus, setAgendaFileStatus] = useState("Noch keine Agenda-Datei geladen.");
+  const [archiveStatus, setArchiveStatus] = useState("Noch keine Projektakte gespeichert oder geladen.");
+  const [loadedArchiveNames, setLoadedArchiveNames] = useState<string[]>([]);
+  const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
   const [simulationInput, setSimulationInput] = useState({ goal: "", participants: "", conflicts: "" });
@@ -599,6 +611,158 @@ export default function Home() {
     reader.readAsText(file);
   }
 
+  function createCurrentMeetingArchive(): MeetingArchive {
+    const title = agendaInput.title || preparationInput.title || "Meeting-Projektakte";
+    const hasAnalysis = Boolean(transcript || agenda || preparation || decision || simulation || stakeholder || patterns);
+    const status: MeetingArchive["metadata"]["status"] = transcript
+      ? "analysiert"
+      : transcription
+        ? "transkribiert"
+        : audioSourceLabel
+          ? "aufgenommen"
+          : agenda || preparation
+            ? "geplant"
+            : hasAnalysis
+              ? "analysiert"
+              : "geplant";
+
+    return {
+      schemaVersion: 1,
+      id: `meeting-${Date.now()}`,
+      savedAt: new Date().toISOString(),
+      appVersion: "Meeting Intelligence KI Arbeitsversion",
+      metadata: {
+        title,
+        date: new Date().toISOString().slice(0, 10),
+        status,
+        participants: agendaInput.participants || preparationInput.participants,
+        goal: agendaInput.meetingGoal || preparationInput.goal,
+        desiredOutcome: agendaInput.desiredOutcome || preparationInput.desiredOutcome
+      },
+      agenda: {
+        input: agendaInput,
+        result: agenda
+      },
+      preparation: {
+        input: preparationInput,
+        result: preparation
+      },
+      audio: {
+        sourceLabel: audioSourceLabel,
+        fileName: audioFileName,
+        durationLabel: recordingDurationLabel,
+        note: "Audiodateien werden in dieser Projektakte noch nicht eingebettet. Speichere die Aufnahme zusätzlich separat über den Download."
+      },
+      transcription: {
+        result: transcription,
+        rawText: transcriptText
+      },
+      transcriptAnalysis: transcript,
+      decisionChallenge: decision,
+      simulation,
+      stakeholderAnalysis: stakeholder,
+      patternAnalysis: patterns
+    };
+  }
+
+  function createArchiveFileName(title: string) {
+    const date = new Date().toISOString().slice(0, 10);
+    const slug = title
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 48) || "meeting";
+
+    return `${date}-${slug}.meeting.json`;
+  }
+
+  function downloadCurrentMeetingArchive() {
+    const archive = createCurrentMeetingArchive();
+    const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = createArchiveFileName(archive.metadata.title);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setArchiveStatus(`Projektakte vorbereitet: ${link.download}. Die Datei wird über den Browser-Download gespeichert.`);
+  }
+
+  function readTextFile(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+      reader.readAsText(file);
+    });
+  }
+
+  function applyMeetingArchive(archive: MeetingArchive) {
+    setAgendaInput(archive.agenda.input);
+    setAgenda(archive.agenda.result);
+    setPreparationInput(archive.preparation.input);
+    setPreparation(archive.preparation.result);
+    setTranscription(archive.transcription.result);
+    setTranscriptText(archive.transcription.rawText);
+    setTranscript(archive.transcriptAnalysis);
+    setDecision(archive.decisionChallenge);
+    setSimulation(archive.simulation);
+    setStakeholder(archive.stakeholderAnalysis);
+    setPatterns(archive.patternAnalysis);
+    setAudioSourceLabel(archive.audio.sourceLabel);
+    setAudioFileName(archive.audio.fileName);
+    setRecordingDurationLabel(archive.audio.durationLabel || "unbekannt");
+    setAudioBlob(null);
+    clearAudioUrl();
+    setAudioUrl("");
+    setRecordingState("idle");
+    setTranscriptionNotice(archive.transcription.rawText ? "Transkript aus Projektakte geladen." : "Projektakte geladen. Kein Transkript in der Akte enthalten.");
+    setArchiveStatus(`Projektakte geladen: ${archive.metadata.title}`);
+  }
+
+  async function handleMeetingArchiveUpload(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await readTextFile(file);
+      const archive = JSON.parse(text) as MeetingArchive;
+      if (archive.schemaVersion !== 1 || !archive.metadata || !archive.agenda || !archive.preparation) {
+        throw new Error("Ungültiges Projektaktenformat.");
+      }
+      applyMeetingArchive(archive);
+      setLoadedArchiveNames([archive.metadata.title || file.name]);
+    } catch {
+      setArchiveStatus("Diese Datei konnte nicht als Meeting-Projektakte gelesen werden.");
+    }
+  }
+
+  async function handleMultipleArchiveAnalysis(files: FileList | null) {
+    if (!files?.length) {
+      return;
+    }
+
+    setLoadingAction("archiveAnalysis");
+    try {
+      const archives = await Promise.all(
+        Array.from(files).map(async (file) => JSON.parse(await readTextFile(file)) as MeetingArchive)
+      );
+      const validArchives = archives.filter((archive) => archive.schemaVersion === 1 && archive.metadata);
+      setLoadedArchiveNames(validArchives.map((archive) => archive.metadata.title));
+      setArchiveAnalysis(await analyzeMeetingArchives(validArchives));
+      setArchiveStatus(`${validArchives.length} Projektakten für die übergreifende Analyse geladen.`);
+    } catch {
+      setArchiveStatus("Mindestens eine Datei konnte nicht als Meeting-Projektakte gelesen werden.");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
   async function handleDecision(event: FormEvent) {
     event.preventDefault();
     setLoadingAction("decision");
@@ -719,6 +883,101 @@ export default function Home() {
                 </p>
               </article>
             </div>
+          </section>
+        )}
+
+        {activeArea === "archives" && (
+          <section className="section">
+            <PrivacyNotice />
+            <div className="archive-intro">
+              <article className="card">
+                <h2>Projektakte für ein Meeting</h2>
+                <p className="lead">
+                  Speichere den aktuellen Arbeitsstand als lokale Meeting-Datei. Die Datei enthält Agenda,
+                  Vorbereitung, Transkript, Analysen, Entscheidungen, Maßnahmen und Metadaten. Audio wird
+                  aktuell nur als Dateihinweis gespeichert und sollte separat heruntergeladen werden.
+                </p>
+              </article>
+              <article className="card">
+                <h2>Lokales Prinzip</h2>
+                <p className="lead">
+                  Es gibt keine Cloud-Datenbank. Die App erzeugt und liest lokale JSON-Projektakten, die du
+                  später erneut laden oder gemeinsam auswerten kannst.
+                </p>
+              </article>
+            </div>
+
+            <div className="archive-grid">
+              <article className="card archive-card">
+                <Download size={24} aria-hidden="true" />
+                <div>
+                  <h2>Aktuelles Meeting speichern</h2>
+                  <p>Erzeugt eine lokale Projektakte als <strong>.meeting.json</strong>.</p>
+                </div>
+                <button className="primary-button" onClick={downloadCurrentMeetingArchive} type="button">
+                  <Download size={17} /> Projektakte speichern
+                </button>
+              </article>
+
+              <article className="card archive-card">
+                <FolderOpen size={24} aria-hidden="true" />
+                <div>
+                  <h2>Projektakte laden</h2>
+                  <p>Öffnet eine gespeicherte Meeting-Akte und stellt Agenda, Transkript und Analysen wieder her.</p>
+                </div>
+                <label className="secondary-button archive-file-button">
+                  <FolderOpen size={17} aria-hidden="true" />
+                  Projektakte auswählen
+                  <input accept=".json,.meeting.json,application/json" onChange={(event) => handleMeetingArchiveUpload(event.target.files?.[0] ?? null)} type="file" />
+                </label>
+              </article>
+
+              <article className="card archive-card">
+                <Files size={24} aria-hidden="true" />
+                <div>
+                  <h2>Viele Meetings analysieren</h2>
+                  <p>Lade mehrere Projektakten, um wiederkehrende Einwände, Risiken und Maßnahmenmuster zu erkennen.</p>
+                </div>
+                <label className="secondary-button archive-file-button">
+                  <Files size={17} aria-hidden="true" />
+                  Mehrere Projektakten auswählen
+                  <input accept=".json,.meeting.json,application/json" multiple onChange={(event) => handleMultipleArchiveAnalysis(event.target.files)} type="file" />
+                </label>
+              </article>
+            </div>
+
+            <p className="result-note">{archiveStatus}</p>
+            {loadedArchiveNames.length > 0 && (
+              <section className="result-block">
+                <h3>Geladene Projektakten</h3>
+                <ul>
+                  {loadedArchiveNames.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {loadingAction === "archiveAnalysis" && <LoadingIndicator label="KI analysiert mehrere Projektakten ..." />}
+            {archiveAnalysis && (
+              <div className="analysis-lane">
+                <h2>Übergreifende Meeting-Analyse</h2>
+                <div className="grid grid--metrics">
+                  <MetricCard icon={Archive} label="Geladene Projektakten" value={String(archiveAnalysis.totalMeetings)} detail="lokale Dateien" />
+                  <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwände" value={String(archiveAnalysis.recurringObjections.length)} detail="über alle Akten" />
+                  <MetricCard icon={AlertTriangle} label="Risikomuster" value={String(archiveAnalysis.repeatedRisks.length)} detail="aus Aktenanalyse" />
+                  <MetricCard icon={ClipboardCheck} label="Verbesserungen" value={String(archiveAnalysis.improvementSuggestions.length)} detail="für nächste Meetings" />
+                </div>
+                <div className="result-grid">
+                  <ResultSection title="Wiederkehrende Einwände" items={archiveAnalysis.recurringObjections} />
+                  <ResultSection title="Wiederkehrende Risiken" items={archiveAnalysis.repeatedRisks} />
+                  <ResultSection title="Vertagte Entscheidungen" items={archiveAnalysis.deferredDecisions} />
+                  <ResultSection title="Maßnahmenmuster" items={archiveAnalysis.actionPatterns} />
+                  <ResultSection title="Agenda-Treue" items={archiveAnalysis.agendaDiscipline} />
+                  <ResultSection title="Verbesserungsvorschläge" items={archiveAnalysis.improvementSuggestions} />
+                </div>
+              </div>
+            )}
           </section>
         )}
 

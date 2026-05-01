@@ -118,3 +118,51 @@ export type MeetingPatternsResult = {
   conflictPatterns: string[];
   improvements: string[];
 };
+
+export type MeetingArchive = {
+  schemaVersion: 1;
+  id: string;
+  savedAt: string;
+  appVersion: string;
+  metadata: {
+    title: string;
+    date: string;
+    status: "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
+    participants: string;
+    goal: string;
+    desiredOutcome: string;
+  };
+  agenda: {
+    input: AgendaInput;
+    result: AgendaResult | null;
+  };
+  preparation: {
+    input: MeetingPreparationInput;
+    result: MeetingPreparationResult | null;
+  };
+  audio: {
+    sourceLabel: string;
+    fileName: string;
+    durationLabel: string;
+    note: string;
+  };
+  transcription: {
+    result: TranscriptionResult | null;
+    rawText: string;
+  };
+  transcriptAnalysis: TranscriptAnalysisResult | null;
+  decisionChallenge: DecisionChallengeResult | null;
+  simulation: MeetingScenario[] | null;
+  stakeholderAnalysis: StakeholderAnalysisResult | null;
+  patternAnalysis: MeetingPatternsResult | null;
+};
+
+export type MultiMeetingArchiveAnalysisResult = {
+  totalMeetings: number;
+  recurringObjections: string[];
+  repeatedRisks: string[];
+  deferredDecisions: string[];
+  actionPatterns: string[];
+  agendaDiscipline: string[];
+  improvementSuggestions: string[];
+};

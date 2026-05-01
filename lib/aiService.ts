@@ -2,10 +2,12 @@ import {
   AgendaInput,
   AgendaResult,
   DecisionChallengeResult,
+  MeetingArchive,
   MeetingPatternsResult,
   MeetingPreparationInput,
   MeetingPreparationResult,
   MeetingScenario,
+  MultiMeetingArchiveAnalysisResult,
   StakeholderAnalysisResult,
   TranscriptionResult,
   TranscriptAnalysisResult
@@ -352,6 +354,49 @@ export async function analyzeMeetingPatterns(): Promise<MeetingPatternsResult> {
       "Jedes Meeting mit einer konkreten Entscheidungsfrage beginnen.",
       "Einwände als Bedingungen für Zustimmung formulieren lassen.",
       "Am Ende Owner, Termin und Risikoannahme sichtbar festhalten."
+    ]
+  };
+}
+
+export async function analyzeMeetingArchives(
+  archives: MeetingArchive[]
+): Promise<MultiMeetingArchiveAnalysisResult> {
+  await delay();
+  const titles = archives.map((archive) => archive.metadata.title).filter(Boolean);
+  const analyzedCount = archives.filter((archive) => archive.transcriptAnalysis).length;
+  const agendaCount = archives.filter((archive) => archive.agenda.result).length;
+
+  return {
+    totalMeetings: archives.length,
+    recurringObjections: [
+      "Ressourcen- und Budgeteinwände tauchen in mehreren Projektakten als wiederkehrendes Muster auf.",
+      "Entscheidungen werden häufig an fehlende Datensicherheit oder unklare Owner gekoppelt.",
+      "Timing und Priorisierung erscheinen als typische Einwandlinien."
+    ],
+    repeatedRisks: [
+      `${analyzedCount} von ${archives.length} geladenen Meetings enthalten bereits Transkript- oder Ergebnisanalysen.`,
+      "Risiken werden oft benannt, aber nicht konsequent in konkrete Maßnahmen übersetzt.",
+      "Vertagungen entstehen vor allem dort, wo Entscheidungsfrage und Verantwortlichkeit getrennt bleiben."
+    ],
+    deferredDecisions: [
+      "Budgetfreigaben und Ressourcenentscheidungen sollten über mehrere Meetings hinweg gesondert verfolgt werden.",
+      "Offene Entscheidungsvoraussetzungen brauchen eine eigene Wiedervorlage mit Termin.",
+      titles.length ? `Für die Projektakten ${titles.slice(0, 3).join(", ")} sollte geprüft werden, welche Entscheidungen mehrfach vertagt wurden.` : "Für geladene Projektakten sollte geprüft werden, welche Entscheidungen mehrfach vertagt wurden."
+    ],
+    actionPatterns: [
+      "Maßnahmen mit Owner und Frist sind deutlich verbindlicher als allgemeine Follow-up-Formulierungen.",
+      "Hohe Prioritäten sollten mit einem konkreten Risiko verknüpft werden.",
+      "Wiederkehrende offene Punkte gehören in ein eigenes Maßnahmenregister."
+    ],
+    agendaDiscipline: [
+      `${agendaCount} von ${archives.length} geladenen Meetings enthalten gespeicherte Agenda-Ergebnisse.`,
+      "Agenda-Treue wird messbar, sobald geplante Punkte, tatsächliche Diskussion und Entscheidungen zusammen gespeichert werden.",
+      "Übersprungene Agenda-Punkte sollten im nächsten Meeting sichtbar wieder aufgenommen werden."
+    ],
+    improvementSuggestions: [
+      "Jede Projektakte mit einer klaren Entscheidungsfrage starten.",
+      "Nach jedem Meeting Entscheidungen, vertagte Punkte und Maßnahmen getrennt speichern.",
+      "Für Musteranalysen mehrere Projektakten laden und insbesondere Einwände, Risiken und offene Maßnahmen vergleichen."
     ]
   };
 }

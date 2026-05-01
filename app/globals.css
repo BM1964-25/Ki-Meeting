@@ -327,6 +327,47 @@ h3 {
   padding: 16px;
 }
 
+.archive-intro {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+.archive-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.archive-card {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.archive-card > svg {
+  color: var(--primary);
+}
+
+.archive-card p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.archive-file-button {
+  cursor: pointer;
+  justify-content: center;
+  position: relative;
+}
+
+.archive-file-button input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
 .audio-workflow {
   display: grid;
   gap: 18px;
@@ -1400,6 +1441,8 @@ h3 {
   .grid--two,
   .form-grid,
   .result-grid,
+  .archive-intro,
+  .archive-grid,
   .agenda-intro,
   .transcript-analysis-hero,
   .transcription-layout,
