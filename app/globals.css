@@ -2286,6 +2286,29 @@ h3 {
   margin: 0;
 }
 
+.module-bridge {
+  align-items: center;
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px;
+}
+
+.module-bridge h2 {
+  margin-bottom: 6px;
+}
+
+.module-bridge .lead {
+  margin: 0;
+}
+
+.module-bridge--form {
+  grid-column: 1 / -1;
+}
+
 .protocol-grid {
   display: grid;
   gap: 14px;
@@ -2772,6 +2795,7 @@ h3 {
   .workflow-intake-grid,
   .workflow-assistant-panel__header,
   .workflow-timeline-step,
+  .module-bridge,
   .report-hero,
   .report-readiness,
   .report-export-grid,

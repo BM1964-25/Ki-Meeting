@@ -1259,6 +1259,22 @@ export default function Home() {
     }
   }
 
+  function transferPreparationToSimulation() {
+    const conflicts = [
+      preparationInput.criticalTopics ? `Kritische Themen:\n${preparationInput.criticalTopics}` : "",
+      preparation?.objections.length ? `Erwartbare Einwände:\n${preparation.objections.map((item) => `- ${item}`).join("\n")}` : "",
+      preparation?.criticalQuestions.length ? `Kritische Fragen:\n${preparation.criticalQuestions.map((item) => `- ${item}`).join("\n")}` : "",
+      preparationInput.ownPosition ? `Eigene Position:\n${preparationInput.ownPosition}` : ""
+    ].filter(Boolean).join("\n\n");
+
+    setSimulationInput({
+      goal: preparationInput.goal || meetingMetadata.goal || agendaInput.meetingGoal,
+      participants: preparationInput.participants || meetingMetadata.participants || agendaInput.participants,
+      conflicts: conflicts || simulationInput.conflicts
+    });
+    setActiveArea("simulate");
+  }
+
   async function handleAgenda(event: FormEvent) {
     event.preventDefault();
     const approved = await requestAiConsent(
@@ -3824,12 +3840,27 @@ export default function Home() {
             </form>
             {loadingAction === "preparation" && <LoadingIndicator label="KI erstellt die Meeting-Vorbereitung ..." />}
             {preparation && (
-              <div className="result-grid">
-                <ResultSection title="Zentrale Argumente" items={preparation.arguments} />
-                <ResultSection title="Erwartbare Einwände" items={preparation.objections} />
-                <ResultSection title="Kritische Fragen" items={preparation.criticalQuestions} />
-                <ResultSection title="Antwortstrategien" items={preparation.responseStrategies} />
-              </div>
+              <>
+                <section className="analysis-lane">
+                  <div className="module-bridge">
+                    <div>
+                      <h2>Vorbereitung in Simulation testen</h2>
+                      <p className="lead">
+                        Übernimmt Ziel, Teilnehmer, kritische Themen, erwartbare Einwände und kritische Fragen in das Simulationsmodul.
+                      </p>
+                    </div>
+                    <button className="primary-button" onClick={transferPreparationToSimulation} type="button">
+                      <PlayCircle size={17} /> Gesprächsverlauf simulieren
+                    </button>
+                  </div>
+                </section>
+                <div className="result-grid">
+                  <ResultSection title="Zentrale Argumente" items={preparation.arguments} />
+                  <ResultSection title="Erwartbare Einwände" items={preparation.objections} />
+                  <ResultSection title="Kritische Fragen" items={preparation.criticalQuestions} />
+                  <ResultSection title="Antwortstrategien" items={preparation.responseStrategies} />
+                </div>
+              </>
             )}
           </section>
         )}
@@ -3867,6 +3898,17 @@ export default function Home() {
           <section className="section">
             <PrivacyNotice />
             <form className="card form-grid" onSubmit={handleSimulation}>
+              <section className="module-bridge module-bridge--form">
+                <div>
+                  <h2>Aus Vorbereitung übernehmen</h2>
+                  <p className="lead">
+                    Nutzt vorhandene Vorbereitung als Ausgangsmaterial für Best Case, Worst Case und Most Likely.
+                  </p>
+                </div>
+                <button className="secondary-button" disabled={!preparation && !preparationInput.goal} onClick={transferPreparationToSimulation} type="button">
+                  <ClipboardCheck size={17} /> Vorbereitung übernehmen
+                </button>
+              </section>
               <Field label="Meeting-Ziel">
                 <textarea value={simulationInput.goal} onChange={(event) => setSimulationInput({ ...simulationInput, goal: event.target.value })} />
               </Field>
