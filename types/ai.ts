@@ -85,6 +85,7 @@ export type TranscriptAnalysisResult = {
     owner: string;
     due: string;
     priority: "Hoch" | "Mittel" | "Niedrig";
+    status?: "Offen" | "In Arbeit" | "Erledigt" | "Blockiert";
     risk: string;
   }>;
   openPoints: string[];

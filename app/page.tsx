@@ -188,6 +188,7 @@ type StoredAiSettings = {
 };
 
 type ExportKind = "management" | "actions" | "decision" | "full";
+type ActionPlanItem = TranscriptAnalysisResult["actionPlan"][number];
 
 const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
   title: "Neue Meeting-Akte",
@@ -1130,7 +1131,7 @@ export default function Home() {
       ...(archive.transcriptAnalysis?.decisions ?? ["Noch keine Entscheidungen gespeichert."]).map((item) => `- ${item}`),
       "",
       "## Maßnahmen",
-      ...(archive.transcriptAnalysis?.actionPlan ?? []).map((item) => `- ${item.task} | Owner: ${item.owner} | Frist: ${item.due} | Priorität: ${item.priority}`),
+      ...(archive.transcriptAnalysis?.actionPlan ?? []).map((item) => `- ${item.task} | Owner: ${item.owner} | Frist: ${item.due} | Priorität: ${item.priority} | Status: ${item.status ?? "Offen"}`),
       ...(archive.transcriptAnalysis?.actionPlan.length ? [] : ["Noch keine Maßnahmen gespeichert."]),
       "",
       "## Follow-up",
@@ -1273,7 +1274,7 @@ export default function Home() {
         ...header,
         "## Maßnahmenregister",
         ...(actions.length
-          ? actions.map((item, index) => `${index + 1}. ${item.task}\n   Owner: ${item.owner}\n   Frist: ${item.due}\n   Priorität: ${item.priority}\n   Risiko: ${item.risk}`)
+          ? actions.map((item, index) => `${index + 1}. ${item.task}\n   Owner: ${item.owner}\n   Frist: ${item.due}\n   Priorität: ${item.priority}\n   Status: ${item.status ?? "Offen"}\n   Risiko: ${item.risk}`)
           : ["Noch keine Maßnahmen vorhanden."]),
         "",
         "## Offene Punkte",
@@ -1510,6 +1511,68 @@ export default function Home() {
     } finally {
       setLoadingAction(null);
     }
+  }
+
+  function updateActionPlanItem(index: number, field: keyof ActionPlanItem, value: string) {
+    setTranscript((currentTranscript) => {
+      if (!currentTranscript) {
+        return currentTranscript;
+      }
+
+      return {
+        ...currentTranscript,
+        actionPlan: currentTranscript.actionPlan.map((item, itemIndex) => (
+          itemIndex === index
+            ? { ...item, [field]: value } as ActionPlanItem
+            : item
+        ))
+      };
+    });
+  }
+
+  function addManualActionPlanItem() {
+    setTranscript((currentTranscript) => {
+      const newItem: ActionPlanItem = {
+        task: "Neue Maßnahme",
+        owner: "offen",
+        due: "noch festlegen",
+        priority: "Mittel",
+        status: "Offen",
+        risk: "Noch keine Risikoeinschätzung erfasst."
+      };
+
+      if (!currentTranscript) {
+        return {
+          summary: "Manuell angelegter Maßnahmenplan.",
+          managementSummary: "Es wurde ein manueller Maßnahmenplan angelegt. Eine vollständige Transkriptanalyse steht noch aus.",
+          said: [],
+          unsaid: [],
+          avoidedTopics: [],
+          contradictions: [],
+          decisions: [],
+          deferredDecisions: [],
+          decisionBasis: [],
+          counterArguments: {
+            Aufsichtsrat: [],
+            "CFO / Banker": [],
+            Projektcontroller: [],
+            "Kunde / Wettbewerber": []
+          },
+          tasks: [],
+          actionPlan: [newItem],
+          openPoints: [],
+          openRisks: [],
+          followUpQuestions: [],
+          followUpEmailDraft: "",
+          timestamps: []
+        };
+      }
+
+      return {
+        ...currentTranscript,
+        actionPlan: [...currentTranscript.actionPlan, newItem]
+      };
+    });
   }
 
   async function handleStakeholder(event: FormEvent) {
@@ -2150,6 +2213,10 @@ export default function Home() {
                               <dt>Priorität</dt>
                               <dd>{item.priority}</dd>
                             </div>
+                            <div>
+                              <dt>Status</dt>
+                              <dd>{item.status ?? "Offen"}</dd>
+                            </div>
                           </dl>
                         </article>
                       ))}
@@ -2227,6 +2294,10 @@ export default function Home() {
                         <div>
                           <dt>Priorität</dt>
                           <dd>{item.priority}</dd>
+                        </div>
+                        <div>
+                          <dt>Status</dt>
+                          <dd>{item.status ?? "Offen"}</dd>
                         </div>
                       </dl>
                     </article>
@@ -2887,28 +2958,40 @@ export default function Home() {
                     <button className="secondary-button" onClick={() => downloadProfessionalExport("actions")} type="button">
                       <Download size={17} /> Maßnahmenliste exportieren
                     </button>
+                    <button className="secondary-button" onClick={addManualActionPlanItem} type="button">
+                      <ListChecks size={17} /> Maßnahme ergänzen
+                    </button>
                   </div>
                   <div className="action-plan-list">
-                    {transcript.actionPlan.map((item) => (
-                      <article className="action-plan-item" key={`${item.task}-${item.owner}`}>
-                        <div>
-                          <h3>{item.task}</h3>
-                          <p>{item.risk}</p>
-                        </div>
-                        <dl>
-                          <div>
-                            <dt>Owner</dt>
-                            <dd>{item.owner}</dd>
-                          </div>
-                          <div>
-                            <dt>Frist</dt>
-                            <dd>{item.due}</dd>
-                          </div>
-                          <div>
-                            <dt>Priorität</dt>
-                            <dd>{item.priority}</dd>
-                          </div>
-                        </dl>
+                    {transcript.actionPlan.map((item, index) => (
+                      <article className="action-plan-item action-plan-item--editable" key={`${item.task}-${item.owner}-${index}`}>
+                        <Field label="Maßnahme">
+                          <textarea value={item.task} onChange={(event) => updateActionPlanItem(index, "task", event.target.value)} />
+                        </Field>
+                        <Field label="Risiko / Kontext">
+                          <textarea value={item.risk} onChange={(event) => updateActionPlanItem(index, "risk", event.target.value)} />
+                        </Field>
+                        <Field label="Owner">
+                          <input value={item.owner} onChange={(event) => updateActionPlanItem(index, "owner", event.target.value)} />
+                        </Field>
+                        <Field label="Frist">
+                          <input value={item.due} onChange={(event) => updateActionPlanItem(index, "due", event.target.value)} />
+                        </Field>
+                        <Field label="Priorität">
+                          <select value={item.priority} onChange={(event) => updateActionPlanItem(index, "priority", event.target.value)}>
+                            <option value="Hoch">Hoch</option>
+                            <option value="Mittel">Mittel</option>
+                            <option value="Niedrig">Niedrig</option>
+                          </select>
+                        </Field>
+                        <Field label="Status">
+                          <select value={item.status ?? "Offen"} onChange={(event) => updateActionPlanItem(index, "status", event.target.value)}>
+                            <option value="Offen">Offen</option>
+                            <option value="In Arbeit">In Arbeit</option>
+                            <option value="Erledigt">Erledigt</option>
+                            <option value="Blockiert">Blockiert</option>
+                          </select>
+                        </Field>
                       </article>
                     ))}
                   </div>

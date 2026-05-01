@@ -1789,7 +1789,7 @@ h3 {
 .measure-row dl {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
 }
 
@@ -1818,7 +1818,7 @@ h3 {
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
   padding: 12px;
 }
 
@@ -1852,6 +1852,14 @@ h3 {
   gap: 14px;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
   padding: 16px;
+}
+
+.action-plan-item--editable {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.1fr) repeat(4, minmax(140px, 0.6fr));
+}
+
+.action-plan-item--editable textarea {
+  min-height: 92px;
 }
 
 .action-plan-item h3 {
