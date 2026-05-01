@@ -76,6 +76,7 @@ type MicrophoneDiagnostics = {
 
 type AreaId =
   | "dashboard"
+  | "workflow"
   | "record"
   | "archives"
   | "agenda"
@@ -89,6 +90,7 @@ type AreaId =
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
+  { id: "workflow", label: "Meeting starten", icon: PlayCircle },
   { id: "record", label: "Audio & Transkription", icon: Mic },
   { id: "archives", label: "Projektakten", icon: Archive },
   { id: "agenda", label: "Agenda planen", icon: ListChecks },
@@ -127,6 +129,16 @@ const FLAT_WAVEFORM_HEIGHT = 4;
 const WAVEFORM_FRAME_SKIP = 3;
 const chunkLengthOptions = [1, 5, 10] as const;
 const MEETING_ARCHIVE_STORAGE_KEY = "meeting-intelligence-ki.archives.v1";
+const AI_SETTINGS_STORAGE_KEY = "meeting-intelligence-ki.ai-settings.v1";
+
+type AiProvider = "anthropic" | "openai";
+type AiMode = "mock" | "api";
+
+type StoredAiSettings = {
+  provider: AiProvider;
+  mode: AiMode;
+  apiKey: string;
+};
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -146,6 +158,30 @@ function loadSavedArchivesFromStorage() {
     return parsedArchives.filter((archive) => archive.schemaVersion === 1 && archive.metadata);
   } catch {
     return [];
+  }
+}
+
+function loadAiSettingsFromStorage(): StoredAiSettings {
+  if (typeof window === "undefined") {
+    return { provider: "anthropic", mode: "mock", apiKey: "" };
+  }
+
+  try {
+    const storedSettings = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
+    if (!storedSettings) {
+      return { provider: "anthropic", mode: "mock", apiKey: "" };
+    }
+
+    const parsedSettings = JSON.parse(storedSettings) as Partial<StoredAiSettings>;
+    const provider = parsedSettings.provider === "openai" ? "openai" : "anthropic";
+    const mode = parsedSettings.mode === "api" ? "api" : "mock";
+    return {
+      provider,
+      mode,
+      apiKey: parsedSettings.apiKey ?? ""
+    };
+  } catch {
+    return { provider: "anthropic", mode: "mock", apiKey: "" };
   }
 }
 
@@ -215,6 +251,7 @@ function formatTimer(seconds: number) {
 }
 
 export default function Home() {
+  const initialAiSettings = useMemo(() => loadAiSettingsFromStorage(), []);
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
@@ -280,11 +317,13 @@ export default function Home() {
   const [stakeholder, setStakeholder] = useState<StakeholderAnalysisResult | null>(null);
   const [patternsText, setPatternsText] = useState("");
   const [patterns, setPatterns] = useState<MeetingPatternsResult | null>(null);
-  const [apiProvider, setApiProvider] = useState<"anthropic" | "openai">("anthropic");
-  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [apiProvider, setApiProvider] = useState<AiProvider>(initialAiSettings.provider);
+  const [aiMode, setAiMode] = useState<AiMode>(initialAiSettings.mode);
+  const [anthropicApiKey, setAnthropicApiKey] = useState(initialAiSettings.apiKey);
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
-  const [anthropicConnectionState, setAnthropicConnectionState] = useState<"disconnected" | "connected" | "error">("disconnected");
-  const [anthropicStatusText, setAnthropicStatusText] = useState("Nicht verbunden");
+  const [anthropicConnectionState, setAnthropicConnectionState] = useState<"disconnected" | "connected" | "error">(initialAiSettings.apiKey ? "connected" : "disconnected");
+  const [anthropicStatusText, setAnthropicStatusText] = useState(initialAiSettings.apiKey ? "Verbindung ok" : "Nicht verbunden");
+  const [aiSettingsStatus, setAiSettingsStatus] = useState(initialAiSettings.apiKey ? "Gespeicherter Schlüssel lokal geladen." : "Noch kein API-Schlüssel lokal gespeichert.");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const dashboardStats = useMemo(
@@ -299,6 +338,9 @@ export default function Home() {
   );
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
+  const aiStatusLabel = aiMode === "api" && anthropicConnectionState === "connected"
+    ? `${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} bereit`
+    : "Mock-KI aktiv";
   const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
   const activeChunkNumber = recordingMode === "long"
     ? Math.max(1, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)) + 1)
@@ -943,6 +985,40 @@ export default function Home() {
     }
   }
 
+  function startNewMeeting() {
+    setPreparationInput(initialPreparation);
+    setPreparation(null);
+    setAgendaInput(initialAgenda);
+    setAgenda(null);
+    setAgendaFileStatus("Noch keine Agenda-Datei geladen.");
+    setDecisionText("");
+    setDecision(null);
+    setSimulationInput({ goal: "", participants: "", conflicts: "" });
+    setSimulation(null);
+    setTranscriptText("");
+    setTranscript(null);
+    setTranscription(null);
+    setTranscriptionNotice("Neues Meeting gestartet. Noch kein Audio für die Transkription vorhanden.");
+    setAudioBlob(null);
+    clearAudioUrl();
+    setAudioUrl("");
+    setAudioSourceLabel("");
+    setAudioFileName("");
+    setRecordingDurationLabel("unbekannt");
+    setRecordingSeconds(0);
+    setRecordingState("idle");
+    setActiveArea("agenda");
+  }
+
+  function persistAiSettings() {
+    window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify({
+      provider: apiProvider,
+      mode: aiMode,
+      apiKey: anthropicApiKey.trim()
+    }));
+    setAiSettingsStatus("KI-Einstellungen wurden lokal im Browser gespeichert.");
+  }
+
   function connectAiProvider() {
     const trimmedKey = anthropicApiKey.trim();
     if (!trimmedKey) {
@@ -953,12 +1029,26 @@ export default function Home() {
 
     setAnthropicConnectionState("connected");
     setAnthropicStatusText("Verbindung ok");
+    setAiMode("api");
+    window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify({
+      provider: apiProvider,
+      mode: "api",
+      apiKey: trimmedKey
+    }));
+    setAiSettingsStatus("API-Schlüssel lokal gespeichert. Echte KI ist als Modus vorbereitet; externe Anfragen sind noch nicht aktiv.");
   }
 
   function disconnectAnthropic() {
     setAnthropicApiKey("");
+    setAiMode("mock");
     setAnthropicConnectionState("disconnected");
     setAnthropicStatusText("Nicht verbunden");
+    window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify({
+      provider: apiProvider,
+      mode: "mock",
+      apiKey: ""
+    }));
+    setAiSettingsStatus("API-Schlüssel wurde lokal entfernt. Mock-KI ist aktiv.");
   }
 
   return (
@@ -1012,7 +1102,9 @@ export default function Home() {
               Simulation und kontinuierliche Verbesserung der eigenen Meeting-Performance.
             </p>
           </div>
-          <span className="status-pill">Mock-KI aktiv</span>
+          <span className={aiMode === "api" && anthropicConnectionState === "connected" ? "status-pill status-pill--api" : "status-pill"}>
+            {aiStatusLabel}
+          </span>
         </header>
 
         {activeArea === "dashboard" && (
@@ -1039,6 +1131,56 @@ export default function Home() {
                   Version nutzt strukturierte Mock-Ergebnisse und ist für spätere KI-APIs vorbereitet.
                 </p>
               </article>
+            </div>
+          </section>
+        )}
+
+        {activeArea === "workflow" && (
+          <section className="section">
+            <div className="workflow-hero">
+              <article className="card">
+                <h2>Neues Meeting starten</h2>
+                <p className="lead">
+                  Starte eine neue Projektakte und arbeite Schritt für Schritt von Agenda über Vorbereitung,
+                  Aufnahme, Analyse und Maßnahmen bis zur lokalen Speicherung.
+                </p>
+                <div className="button-row">
+                  <button className="primary-button" onClick={startNewMeeting} type="button">
+                    <PlayCircle size={17} /> Neues Meeting starten
+                  </button>
+                  <button className="secondary-button" onClick={() => setActiveArea("archives")} type="button">
+                    <Archive size={17} /> Projektakten öffnen
+                  </button>
+                </div>
+              </article>
+              <article className="card">
+                <h2>KI-Modus</h2>
+                <p className="lead">
+                  Aktuell: {aiMode === "api" && anthropicConnectionState === "connected" ? `${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} vorbereitet` : "Mock-KI"}.
+                  Externe API-Anfragen sind noch nicht aktiv und werden erst nach ausdrücklicher Freigabe angebunden.
+                </p>
+              </article>
+            </div>
+            <div className="workflow-steps">
+              {[
+                { title: "1. Agenda", detail: "Agenda entwerfen, bestehende Agenda einfügen oder Datei laden.", target: "agenda" as AreaId, icon: ListChecks },
+                { title: "2. Vorbereitung", detail: "Argumente, Einwände, kritische Fragen und Antwortstrategien vorbereiten.", target: "prepare" as AreaId, icon: ClipboardCheck },
+                { title: "3. Aufnahme", detail: "Meeting aufnehmen oder Audio hochladen und Transkript erzeugen.", target: "record" as AreaId, icon: Mic },
+                { title: "4. Analyse", detail: "Rohtranskript, Entscheidungen, Risiken und Maßnahmen analysieren.", target: "transcript" as AreaId, icon: FileSearch },
+                { title: "5. Projektakte", detail: "Arbeitsstand lokal speichern, exportieren oder mehrere Meetings auswerten.", target: "archives" as AreaId, icon: Archive }
+              ].map((step) => {
+                const Icon = step.icon;
+                return (
+                  <article className="workflow-step" key={step.title}>
+                    <Icon size={22} aria-hidden="true" />
+                    <h3>{step.title}</h3>
+                    <p>{step.detail}</p>
+                    <button className="secondary-button" onClick={() => setActiveArea(step.target)} type="button">
+                      Öffnen
+                    </button>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1911,21 +2053,41 @@ export default function Home() {
                 <select
                   value={apiProvider}
                   onChange={(event) => {
-                    setApiProvider(event.target.value as "anthropic" | "openai");
+                    setApiProvider(event.target.value as AiProvider);
                     setAnthropicConnectionState("disconnected");
                     setAnthropicStatusText("Nicht verbunden");
+                    setAiMode("mock");
                   }}
                 >
                   <option value="anthropic">Anthropic</option>
                   <option value="openai">OpenAI</option>
                 </select>
               </div>
+              <div className="setting-row">
+                <span>KI-Modus</span>
+                <select
+                  value={aiMode}
+                  onChange={(event) => {
+                    const nextMode = event.target.value as AiMode;
+                    setAiMode(nextMode);
+                    if (nextMode === "api" && anthropicConnectionState !== "connected") {
+                      setAiSettingsStatus("API-Modus gewählt. Bitte Schlüssel eingeben und verbinden.");
+                    }
+                    if (nextMode === "mock") {
+                      setAiSettingsStatus("Mock-KI ist aktiv. Es werden keine externen API-Anfragen gesendet.");
+                    }
+                  }}
+                >
+                  <option value="mock">Mock-KI</option>
+                  <option value="api">Echte KI vorbereiten</option>
+                </select>
+              </div>
               <div className="settings-connection-panel">
                 <div>
                   <h3>{apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} API-Verbindung</h3>
                   <p>
-                    Der Schlüssel wird aktuell nur lokal im Eingabefeld geprüft. Es wird noch keine Anfrage
-                    an den Anbieter gesendet.
+                    Der Schlüssel kann lokal im Browser gespeichert werden. Es wird noch keine Anfrage
+                    an den Anbieter gesendet; echte API-Aufrufe werden erst nach separater Freigabe angebunden.
                   </p>
                 </div>
                 <div className="setting-row">
@@ -1958,6 +2120,9 @@ export default function Home() {
                   <button className="primary-button" onClick={connectAiProvider} type="button">
                     <Sparkles size={17} /> Verbinden
                   </button>
+                  <button className="secondary-button" onClick={persistAiSettings} type="button">
+                    <Download size={16} /> Lokal speichern
+                  </button>
                   {anthropicConnectionState === "connected" && (
                     <>
                       <button className="secondary-button" onClick={disconnectAnthropic} type="button">
@@ -1972,6 +2137,7 @@ export default function Home() {
                 {anthropicConnectionState === "error" && (
                   <p className="connection-error">{anthropicStatusText}</p>
                 )}
+                <p className="settings-note">{aiSettingsStatus}</p>
               </div>
               <div className="setting-row">
                 <span>Datenschutzmodus</span>
