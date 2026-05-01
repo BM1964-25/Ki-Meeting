@@ -95,25 +95,11 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: #dbe4ee;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 30px 1fr;
-  min-height: 42px;
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
   margin-bottom: 10px;
-  padding: 8px 10px;
-  text-align: left;
-  width: 100%;
-}
-
-.sidebar-toggle svg {
-  justify-self: center;
-}
-
-.sidebar-toggle__label {
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 42px;
 }
 
 .sidebar-toggle:hover {
@@ -165,15 +151,12 @@ button {
 }
 
 .app-shell--nav-collapsed .brand__text,
-.app-shell--nav-collapsed .sidebar-toggle__label,
 .app-shell--nav-collapsed .nav-button__label {
   display: none;
 }
 
 .app-shell--nav-collapsed .sidebar-toggle {
-  grid-template-columns: 1fr;
-  justify-items: center;
-  padding: 8px;
+  justify-self: center;
 }
 
 .app-shell--nav-collapsed .nav-button {
