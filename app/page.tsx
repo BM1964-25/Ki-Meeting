@@ -17,9 +17,8 @@ import {
   Files,
   Gauge,
   ListChecks,
+  Menu,
   MessageSquareText,
-  PanelLeftClose,
-  PanelLeftOpen,
   Pause,
   PlayCircle,
   RotateCcw,
@@ -980,7 +979,7 @@ export default function Home() {
           onClick={() => setIsSidebarCollapsed((currentValue) => !currentValue)}
           type="button"
         >
-          {isSidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          <Menu size={21} aria-hidden="true" />
         </button>
         <nav className="nav-list" aria-label="Hauptbereiche">
           {navItems.map((item) => {

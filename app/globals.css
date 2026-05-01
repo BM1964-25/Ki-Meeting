@@ -91,16 +91,15 @@ button {
 
 .sidebar-toggle {
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
   color: #dbe4ee;
   display: grid;
   gap: 10px;
   grid-template-columns: 30px 1fr;
-  min-height: 44px;
+  min-height: 34px;
   margin-bottom: 10px;
-  padding: 8px 10px;
+  padding: 2px 10px;
   width: 100%;
 }
 
@@ -109,8 +108,12 @@ button {
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+}
+
+.sidebar-toggle:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 3px;
 }
 
 .nav-list {
@@ -164,7 +167,7 @@ button {
 .app-shell--nav-collapsed .sidebar-toggle {
   grid-template-columns: 1fr;
   justify-self: center;
-  padding: 8px;
+  padding: 2px;
 }
 
 .app-shell--nav-collapsed .nav-button {
