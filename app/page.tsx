@@ -9,12 +9,10 @@ import {
   ClipboardCheck,
   Download,
   Mic,
-  PauseCircle,
   FileSearch,
   Gauge,
   MessageSquareText,
   PlayCircle,
-  Plus,
   Square,
   Settings,
   ShieldQuestion,
@@ -506,12 +504,13 @@ export default function Home() {
                   <div className={`recorder-composer recorder-composer--${recordingState}`}>
                     <button
                       aria-label="Neue Aufnahme starten"
-                      className="recorder-icon-button recorder-icon-button--ghost"
+                      className="recorder-start-button"
                       disabled={recordingState === "recording" || recordingState === "paused"}
                       onClick={startRecording}
                       type="button"
                     >
-                      <Plus size={24} aria-hidden="true" />
+                      <Mic size={16} aria-hidden="true" />
+                      Start
                     </button>
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
                       {waveformBars.map((height, index) => (
@@ -523,6 +522,15 @@ export default function Home() {
                       ))}
                     </div>
                     <span className="recorder-timer">{formatTimer(recordingSeconds)}</span>
+                    <button
+                      aria-label={recordingState === "paused" ? "Aufnahme fortsetzen" : "Aufnahme pausieren"}
+                      className="recorder-text-button"
+                      disabled={!recorder}
+                      onClick={recordingState === "paused" ? resumeRecording : pauseRecording}
+                      type="button"
+                    >
+                      {recordingState === "paused" ? "Fortsetzen" : "Pause"}
+                    </button>
                     <button
                       aria-label={recordingState === "recording" ? "Aufnahme stoppen" : "Aufnahme pausiert oder nicht gestartet"}
                       className="recorder-icon-button recorder-icon-button--stop"
@@ -542,6 +550,10 @@ export default function Home() {
                       <ArrowUp size={24} aria-hidden="true" />
                     </button>
                   </div>
+                  <p className="recorder-helper">
+                    Start beginnt die Aufnahme. Stop beendet sie und legt die Datei temporär im Browser ab.
+                    Der Pfeil transkribiert erst, wenn eine Aufnahme vorhanden ist.
+                  </p>
                   <div className="recording-header">
                     <span className={`recording-status recording-status--${recordingState}`}>
                       Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme läuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
@@ -559,17 +571,6 @@ export default function Home() {
                     <li className={recordingState === "ready" ? "recording-steps__done" : ""}>Stopp drücken. Danach liegt die Aufnahme temporär im Browser vor.</li>
                     <li className={audioUrl ? "recording-steps__done" : ""}>Mit Download dauerhaft als Datei speichern oder direkt transkribieren.</li>
                   </ol>
-                  <div className="button-row">
-                    <button className="primary-button" onClick={startRecording} type="button" disabled={recordingState === "recording" || recordingState === "paused"}>
-                      <Mic size={17} /> Neue Aufnahme starten
-                    </button>
-                    <button className="secondary-button" onClick={recordingState === "paused" ? resumeRecording : pauseRecording} type="button" disabled={!recorder}>
-                      <PauseCircle size={17} /> {recordingState === "paused" ? "Aufnahme fortsetzen" : "Aufnahme pausieren"}
-                    </button>
-                    <button className="secondary-button" onClick={stopRecording} type="button" disabled={!recorder}>
-                      <Square size={15} /> Aufnahme stoppen
-                    </button>
-                  </div>
                   {recordingError && <p className="recording-error">{recordingError}</p>}
                 </div>
                 {audioUrl && (

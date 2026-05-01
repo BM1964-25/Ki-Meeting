@@ -331,17 +331,54 @@ h3 {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8dde3;
-  border-radius: 32px;
-  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.06);
   display: grid;
-  gap: 14px;
-  grid-template-columns: 42px minmax(160px, 1fr) auto 48px 48px;
-  min-height: 78px;
-  padding: 13px 14px;
+  gap: 10px;
+  grid-template-columns: auto minmax(150px, 1fr) auto auto 34px 42px;
+  min-height: 62px;
+  padding: 9px 10px;
 }
 
 .recorder-composer--recording {
   border-color: #f2b8ad;
+}
+
+.recorder-start-button,
+.recorder-text-button {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.recorder-start-button {
+  background: #15191f;
+  color: #ffffff;
+}
+
+.recorder-start-button:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.recorder-text-button {
+  background: #ffffff;
+  color: var(--text);
+}
+
+.recorder-text-button:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.recorder-start-button:disabled,
+.recorder-text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .recorder-icon-button {
@@ -349,24 +386,14 @@ h3 {
   border: 0;
   border-radius: 999px;
   display: inline-flex;
-  height: 42px;
+  height: 34px;
   justify-content: center;
-  width: 42px;
+  width: 34px;
 }
 
 .recorder-icon-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.recorder-icon-button--ghost {
-  background: transparent;
-  color: #98a2b3;
-}
-
-.recorder-icon-button--ghost:hover:not(:disabled) {
-  background: var(--surface-muted);
-  color: var(--text);
 }
 
 .recorder-icon-button--stop {
@@ -377,8 +404,8 @@ h3 {
 .recorder-icon-button--send {
   background: #15191f;
   color: #ffffff;
-  height: 52px;
-  width: 52px;
+  height: 42px;
+  width: 42px;
 }
 
 .recorder-icon-button--send:hover:not(:disabled) {
@@ -388,14 +415,14 @@ h3 {
 .recorder-waveform {
   align-items: center;
   display: flex;
-  gap: 4px;
-  min-height: 48px;
+  gap: 3px;
+  min-height: 38px;
   overflow: hidden;
   position: relative;
 }
 
 .recorder-waveform::before {
-  border-top: 2px dashed #c4cbd3;
+  border-top: 1px dashed #c4cbd3;
   content: "";
   left: 0;
   position: absolute;
@@ -408,8 +435,8 @@ h3 {
   background: #22272f;
   border-radius: 999px;
   display: inline-block;
-  flex: 0 0 4px;
-  min-height: 4px;
+  flex: 0 0 3px;
+  min-height: 3px;
   position: relative;
   transition: height 110ms linear, opacity 110ms linear;
   z-index: 1;
@@ -421,10 +448,17 @@ h3 {
 
 .recorder-timer {
   color: #596273;
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 800;
-  min-width: 48px;
+  min-width: 42px;
   text-align: right;
+}
+
+.recorder-helper {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 10px 0 0;
 }
 
 .recording-consent {
@@ -820,10 +854,19 @@ h3 {
   }
 
   .recorder-composer {
-    border-radius: 24px;
+    border-radius: 18px;
     gap: 9px;
-    grid-template-columns: 36px minmax(80px, 1fr) auto 40px 44px;
+    grid-template-columns: 1fr auto auto;
     padding: 11px;
+  }
+
+  .recorder-start-button {
+    grid-column: 1 / 2;
+  }
+
+  .recorder-waveform {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .recorder-icon-button {
