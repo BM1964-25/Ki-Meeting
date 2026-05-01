@@ -95,11 +95,17 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: #dbe4ee;
-  display: inline-flex;
-  height: 42px;
-  justify-content: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 30px 1fr;
+  min-height: 44px;
   margin-bottom: 10px;
-  width: 42px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.sidebar-toggle svg {
+  justify-self: center;
 }
 
 .sidebar-toggle:hover {
@@ -156,7 +162,9 @@ button {
 }
 
 .app-shell--nav-collapsed .sidebar-toggle {
+  grid-template-columns: 1fr;
   justify-self: center;
+  padding: 8px;
 }
 
 .app-shell--nav-collapsed .nav-button {
