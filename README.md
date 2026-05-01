@@ -31,7 +31,7 @@ Die aktuelle Version nutzt Mock-Funktionen in `lib/aiService.ts`. Diese Funktion
 
 ## Aufnahme und Transkription
 
-Im Bereich `Meeting aufnehmen` kann eine Aufnahme im Browser gestartet oder eine vorhandene Audiodatei hochgeladen werden. Die Transkription ist aktuell noch ein Mock und schreibt das Beispiel-Transkript direkt in den Bereich `Transkript analysieren`.
+Im Bereich `Audio & Transkription` kann eine Live-Aufnahme im Browser gestartet oder eine vorhandene Audiodatei hochgeladen werden. Die Transkription ist aktuell noch ein Mock und schreibt das Beispiel-Transkript direkt in den Bereich `Transkript analysieren`.
 
 ## Datenschutz
 

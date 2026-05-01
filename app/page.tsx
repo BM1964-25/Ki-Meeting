@@ -59,7 +59,7 @@ type AreaId =
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
-  { id: "record", label: "Meeting aufnehmen", icon: Mic },
+  { id: "record", label: "Audio & Transkription", icon: Mic },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
   { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
   { id: "simulate", label: "Meeting simulieren", icon: PlayCircle },
@@ -453,9 +453,9 @@ export default function Home() {
             <PrivacyNotice />
             <div className="grid grid--two">
               <article className="card">
-                <h2>Meeting aufnehmen</h2>
+                <h2>Meeting live aufnehmen</h2>
                 <p className="lead">
-                  Aufnahme erfolgt lokal im Browser. Vor dem Start fragt der Browser nach Zugriff auf das Mikrofon.
+                  Live-Aufnahme erfolgt lokal im Browser. Vor dem Start fragt der Browser nach Zugriff auf das Mikrofon.
                 </p>
                 <p className="recording-consent">
                   Vor einer echten Meeting-Aufnahme sollten alle Teilnehmenden informiert sein und die
@@ -532,9 +532,9 @@ export default function Home() {
               </article>
 
               <article className="card">
-                <h2>Audio hochladen</h2>
+                <h2>Vorhandene Audiodatei hochladen</h2>
                 <p className="lead">
-                  Alternativ kann eine bestehende Aufnahme hochgeladen werden. Die aktuelle Version erzeugt daraus ein Mock-Transkript.
+                  Alternativ kann eine bestehende Aufnahme als Audioquelle genutzt werden. Die aktuelle Version erzeugt daraus ein Mock-Transkript.
                 </p>
                 <label className="upload-box">
                   <Upload size={22} aria-hidden="true" />
