@@ -604,15 +604,51 @@ h3 {
 .workflow-intake-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.workflow-intake-grid label:nth-child(n + 4) {
+.workflow-intake-grid label:nth-child(n + 6) {
   align-self: stretch;
+  grid-column: span 2;
 }
 
 .workflow-intake-grid textarea {
   min-height: 112px;
+}
+
+.workflow-type-card {
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-column: span 4;
+  padding: 14px;
+}
+
+.workflow-type-card span {
+  color: var(--primary-dark);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.workflow-type-card h3 {
+  margin: 0;
+}
+
+.workflow-type-card p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.workflow-type-card ul {
+  color: var(--text);
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding-left: 18px;
 }
 
 .workflow-step {
@@ -2784,6 +2820,11 @@ h3 {
 
   .quality-panel__details {
     justify-content: flex-start;
+  }
+
+  .workflow-intake-grid label,
+  .workflow-type-card {
+    grid-column: auto;
   }
 
   .transcription-workspace__header {

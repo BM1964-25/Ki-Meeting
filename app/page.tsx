@@ -155,6 +155,70 @@ const navGroups = [
   }
 ] as const satisfies Array<{ label: string; items: readonly AreaId[] }>;
 
+const meetingStartTypeTemplates: Record<MeetingStartType, {
+  label: string;
+  focus: string;
+  prompts: string[];
+  agendaHint: string;
+  preparationHint: string;
+}> = {
+  entscheidung: {
+    label: "Entscheidung",
+    focus: "Beschlussreife, Entscheidungsoptionen, Risiken und klare Verantwortlichkeiten.",
+    prompts: [
+      "Welche Entscheidung soll am Ende verbindlich getroffen werden?",
+      "Welche Alternativen stehen realistisch zur Auswahl?",
+      "Welche Risiken oder Abhängigkeiten könnten die Entscheidung kippen?"
+    ],
+    agendaHint: "Optionen, Entscheidungskriterien, Risiken, Beschlussvorschlag und Verantwortlichkeiten explizit einplanen.",
+    preparationHint: "Devil's Advocate vorbereiten, Entscheidungsgrundlage schärfen und Gegenargumente aus Governance-Sicht antizipieren."
+  },
+  eskalation: {
+    label: "Eskalation",
+    focus: "Blockaden, Verantwortungsfragen, Entscheidungsbedarf und Deeskalation.",
+    prompts: [
+      "Welche Blockade muss konkret gelöst werden?",
+      "Welche Parteien sehen die Lage unterschiedlich?",
+      "Welche Entscheidung oder Ressource wird zur Lösung benötigt?"
+    ],
+    agendaHint: "Sachlage, Konfliktlinien, Entscheidungsbedarf, Lösungsoptionen und verbindliche nächste Schritte trennen.",
+    preparationHint: "Fakten von Bewertungen trennen, Eskalationslogik begründen und deeskalierende Formulierungen vorbereiten."
+  },
+  status: {
+    label: "Status",
+    focus: "Fortschritt, Abweichungen, Risiken, offene Punkte und nächste Maßnahmen.",
+    prompts: [
+      "Welche Fortschritte müssen berichtet werden?",
+      "Wo gibt es Planabweichungen oder Risiken?",
+      "Welche offenen Punkte benötigen Entscheidungen oder Owner?"
+    ],
+    agendaHint: "Status, Abweichungen, Risiken, Entscheidungen und Maßnahmen nacheinander prüfen.",
+    preparationHint: "Ampellogik, klare Abweichungsbegründung und präzise Maßnahmenvorschläge vorbereiten."
+  },
+  verhandlung: {
+    label: "Verhandlung",
+    focus: "Interessen, Konzessionen, Verhandlungsgrenzen und Anschlussfähigkeit.",
+    prompts: [
+      "Was ist das gewünschte Verhandlungsergebnis?",
+      "Welche rote Linie darf nicht überschritten werden?",
+      "Welche Gegenleistung oder Konzession ist realistisch?"
+    ],
+    agendaHint: "Interessen, Positionen, Optionen, Grenzen und Abschlussformulierung sauber strukturieren.",
+    preparationHint: "Stakeholder-Interessen, Trigger, rote Linien und anschlussfähige Formulierungen vorbereiten."
+  },
+  strategie: {
+    label: "Strategie",
+    focus: "Zielbild, Optionen, Prioritäten, Trade-offs und strategische Konsequenzen.",
+    prompts: [
+      "Welches strategische Zielbild soll geschärft werden?",
+      "Welche Optionen oder Szenarien stehen im Raum?",
+      "Welche langfristigen Konsequenzen sind kritisch?"
+    ],
+    agendaHint: "Zielbild, strategische Optionen, Bewertungskriterien, Trade-offs und nächste Entscheidungsstufe einplanen.",
+    preparationHint: "Szenarien, Gegenargumente, strategische Risiken und klare Entscheidungshypothesen vorbereiten."
+  }
+};
+
 const initialPreparation: MeetingPreparationInput = {
   title: "",
   goal: "",
@@ -187,6 +251,7 @@ const OPENAI_AUDIO_UPLOAD_LIMIT_MB = 25;
 type AiProvider = "anthropic" | "openai";
 type AiMode = "mock" | "api";
 type MeetingStatus = "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
+type MeetingStartType = "entscheidung" | "eskalation" | "status" | "verhandlung" | "strategie";
 
 type MeetingMetadataForm = {
   title: string;
@@ -199,6 +264,7 @@ type MeetingMetadataForm = {
 };
 
 type MeetingStartDraft = {
+  meetingType: MeetingStartType;
   title: string;
   project: string;
   context: string;
@@ -208,6 +274,7 @@ type MeetingStartDraft = {
   criticalTopics: string;
   ownPosition: string;
   duration: string;
+  typeSpecificNotes: string;
 };
 
 type AiConsentDialog = {
@@ -238,6 +305,7 @@ const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
 });
 
 const createInitialMeetingStartDraft = (): MeetingStartDraft => ({
+  meetingType: "entscheidung",
   title: "",
   project: "",
   context: "",
@@ -246,7 +314,8 @@ const createInitialMeetingStartDraft = (): MeetingStartDraft => ({
   desiredOutcome: "",
   criticalTopics: "",
   ownPosition: "",
-  duration: "60 Minuten"
+  duration: "60 Minuten",
+  typeSpecificNotes: ""
 });
 
 const createSilentWaveform = () =>
@@ -489,6 +558,7 @@ export default function Home() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [aiConsentDialog, setAiConsentDialog] = useState<AiConsentDialog | null>(null);
   const [lastAiResultMeta, setLastAiResultMeta] = useState<AiResultMeta | null>(null);
+  const meetingStartTemplate = meetingStartTypeTemplates[meetingStartDraft.meetingType];
 
   const dashboardStats = useMemo(
     () => ({
@@ -1988,12 +2058,22 @@ export default function Home() {
     const criticalTopics = meetingStartDraft.criticalTopics.trim();
     const ownPosition = meetingStartDraft.ownPosition.trim();
     const duration = meetingStartDraft.duration.trim() || "60 Minuten";
+    const typeSpecificNotes = meetingStartDraft.typeSpecificNotes.trim();
+    const template = meetingStartTypeTemplates[meetingStartDraft.meetingType];
+    const typeGuidance = [
+      `Meeting-Typ: ${template.label}`,
+      `Fokus: ${template.focus}`,
+      `Agenda-Hinweis: ${template.agendaHint}`,
+      typeSpecificNotes ? `Zusatzantworten: ${typeSpecificNotes}` : ""
+    ].filter(Boolean).join("\n");
     const agendaText = [
+      `Meeting-Typ: ${template.label}`,
       context ? `Anlass: ${context}` : "",
       goal ? `Ziel: ${goal}` : "",
       desiredOutcome ? `Gewünschtes Ergebnis: ${desiredOutcome}` : "",
       criticalTopics ? `Kritische Themen: ${criticalTopics}` : "",
-      "Vorschlag: Einstieg, Zielklärung, kritische Punkte, Entscheidungsbedarf, Maßnahmen und Abschluss."
+      typeSpecificNotes ? `Typbezogene Hinweise: ${typeSpecificNotes}` : "",
+      `Vorschlag: ${template.agendaHint}`
     ].filter(Boolean).join("\n");
 
     setMeetingMetadata((currentMetadata) => ({
@@ -2021,15 +2101,15 @@ export default function Home() {
       goal,
       participants,
       desiredOutcome,
-      criticalTopics,
-      ownPosition
+      criticalTopics: [criticalTopics, typeGuidance].filter(Boolean).join("\n\n"),
+      ownPosition: [ownPosition, template.preparationHint].filter(Boolean).join("\n\n")
     }));
     setSimulationInput({
       goal,
       participants,
-      conflicts: criticalTopics
+      conflicts: [criticalTopics, typeSpecificNotes, template.focus].filter(Boolean).join("\n\n")
     });
-    setDecisionText(desiredOutcome || goal);
+    setDecisionText([desiredOutcome || goal, template.preparationHint, typeSpecificNotes].filter(Boolean).join("\n\n"));
     setArchiveStatus("Fragen-Assistent hat die aktuelle Meeting-Akte vorbefüllt. Bitte Agenda und Vorbereitung fachlich prüfen.");
     setActiveArea(targetArea);
   }
@@ -2242,6 +2322,13 @@ export default function Home() {
                 <span>lokal gespeichert erst nach Akten-Speicherung</span>
               </div>
               <div className="workflow-intake-grid">
+                <Field label="Meeting-Typ">
+                  <select value={meetingStartDraft.meetingType} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, meetingType: event.target.value as MeetingStartType })}>
+                    {Object.entries(meetingStartTypeTemplates).map(([type, template]) => (
+                      <option key={type} value={type}>{template.label}</option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Meeting-Titel">
                   <input value={meetingStartDraft.title} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, title: event.target.value })} />
                 </Field>
@@ -2251,6 +2338,16 @@ export default function Home() {
                 <Field label="Dauer">
                   <input placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, duration: event.target.value })} />
                 </Field>
+                <section className="workflow-type-card">
+                  <span>{meetingStartTemplate.label}</span>
+                  <h3>Zusatzfragen für diesen Meeting-Typ</h3>
+                  <p>{meetingStartTemplate.focus}</p>
+                  <ul>
+                    {meetingStartTemplate.prompts.map((prompt) => (
+                      <li key={prompt}>{prompt}</li>
+                    ))}
+                  </ul>
+                </section>
                 <Field label="Anlass">
                   <textarea value={meetingStartDraft.context} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, context: event.target.value })} />
                 </Field>
@@ -2268,6 +2365,13 @@ export default function Home() {
                 </Field>
                 <Field label="Eigene Position">
                   <textarea value={meetingStartDraft.ownPosition} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: event.target.value })} />
+                </Field>
+                <Field label={`Zusatzantworten: ${meetingStartTemplate.label}`}>
+                  <textarea
+                    placeholder={meetingStartTemplate.prompts.join("\n")}
+                    value={meetingStartDraft.typeSpecificNotes}
+                    onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, typeSpecificNotes: event.target.value })}
+                  />
                 </Field>
               </div>
               <div className="button-row">
