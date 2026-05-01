@@ -95,6 +95,7 @@ const initialPreparation: MeetingPreparationInput = {
 const WAVEFORM_BAR_COUNT = 86;
 const FLAT_WAVEFORM_HEIGHT = 4;
 const WAVEFORM_FRAME_SKIP = 3;
+const chunkLengthOptions = [1, 5, 10] as const;
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -179,6 +180,8 @@ export default function Home() {
   const [audioFileName, setAudioFileName] = useState("");
   const [recordingDurationLabel, setRecordingDurationLabel] = useState("unbekannt");
   const [recordingError, setRecordingError] = useState("");
+  const [recordingMode, setRecordingMode] = useState<"standard" | "long">("standard");
+  const [chunkLengthMinutes, setChunkLengthMinutes] = useState<(typeof chunkLengthOptions)[number]>(5);
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<MicrophoneDiagnostics | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
   const [loadingAction, setLoadingAction] = useState<
@@ -231,6 +234,12 @@ export default function Home() {
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
   const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
+  const activeChunkNumber = recordingMode === "long"
+    ? Math.max(1, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)) + 1)
+    : 1;
+  const completedChunkCount = recordingMode === "long"
+    ? Math.max(0, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)))
+    : 0;
 
   useEffect(() => {
     if (recordingState !== "recording" || !startedAtRef.current) {
@@ -661,6 +670,66 @@ export default function Home() {
                   Vor einer echten Meeting-Aufnahme sollten alle Teilnehmenden informiert sein und die
                   notwendigen Zustimmungen sowie internen Vorgaben geklärt sein.
                 </p>
+                <div className="recording-mode-panel" aria-label="Aufnahmeart">
+                  <div className="recording-mode-panel__header">
+                    <div>
+                      <h3>Aufnahmeart</h3>
+                      <p>Standard für kurze Gespräche, langer Modus als vorbereitete Struktur für robuste Meeting-Aufnahmen.</p>
+                    </div>
+                    <span className="mode-badge">{recordingMode === "long" ? "Langes Meeting" : "Standard"}</span>
+                  </div>
+                  <div className="mode-toggle" role="group" aria-label="Aufnahmeart wählen">
+                    <button
+                      className={recordingMode === "standard" ? "mode-toggle__button mode-toggle__button--active" : "mode-toggle__button"}
+                      onClick={() => setRecordingMode("standard")}
+                      type="button"
+                    >
+                      Standardaufnahme
+                    </button>
+                    <button
+                      className={recordingMode === "long" ? "mode-toggle__button mode-toggle__button--active" : "mode-toggle__button"}
+                      onClick={() => setRecordingMode("long")}
+                      type="button"
+                    >
+                      Langes Meeting
+                    </button>
+                  </div>
+                  {recordingMode === "long" && (
+                    <div className="chunk-settings">
+                      <span>Abschnittslänge</span>
+                      <div className="chunk-options" role="group" aria-label="Abschnittslänge wählen">
+                        {chunkLengthOptions.map((minutes) => (
+                          <button
+                            className={chunkLengthMinutes === minutes ? "chunk-option chunk-option--active" : "chunk-option"}
+                            key={minutes}
+                            onClick={() => setChunkLengthMinutes(minutes)}
+                            type="button"
+                          >
+                            {minutes} Min.
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="chunk-status-grid">
+                    <div>
+                      <dt>Aktueller Abschnitt</dt>
+                      <dd>{recordingMode === "long" ? `Teil ${activeChunkNumber}` : "Einzelaufnahme"}</dd>
+                    </div>
+                    <div>
+                      <dt>Fertige Abschnitte</dt>
+                      <dd>{recordingMode === "long" ? completedChunkCount : "0"}</dd>
+                    </div>
+                    <div>
+                      <dt>Speicherprinzip</dt>
+                      <dd>{recordingMode === "long" ? "Abschnitte vorbereitet" : "eine Audiodatei"}</dd>
+                    </div>
+                  </div>
+                  <p className="chunk-explainer">
+                    Die echte automatische Abschnittsspeicherung ist vorbereitet, aber noch nicht aktiv. Aktuell erzeugt
+                    die App nach Stop weiterhin eine lokale Audiodatei; der lange Modus zeigt bereits die spätere Struktur.
+                  </p>
+                </div>
                 <div className="recording-panel">
                   <div className={`recorder-composer recorder-composer--${recordingState}`}>
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
