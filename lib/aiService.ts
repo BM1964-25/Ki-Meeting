@@ -30,9 +30,117 @@ const mockConfig: AiServiceConfig = {
 };
 
 const OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const OPENAI_TEXT_MODEL = "gpt-5.2";
+const ANTHROPIC_TEXT_MODEL = "claude-opus-4-6";
 const MAX_TRANSCRIPTION_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-async function routeAiRequest<T>(config: AiServiceConfig | undefined, mockResult: T): Promise<T> {
+function buildJsonPrompt(task: string, input: unknown, mockResult: unknown) {
+  return [
+    "Du bist Meeting Intelligence KI für professionelle Meeting-Arbeit.",
+    "Antworte ausschließlich mit gültigem JSON, ohne Markdown und ohne Erläuterung.",
+    "Nutze exakt die Struktur des Beispiel-JSON. Formuliere fachlich präzise auf Deutsch.",
+    "",
+    `Aufgabe: ${task}`,
+    "",
+    "Eingaben:",
+    JSON.stringify(input, null, 2),
+    "",
+    "Beispielstruktur:",
+    JSON.stringify(mockResult, null, 2)
+  ].join("\n");
+}
+
+function parseJsonResponse<T>(text: string, fallback: T): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      return fallback;
+    }
+
+    try {
+      return JSON.parse(jsonMatch[0]) as T;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
+function extractOpenAiText(response: unknown) {
+  const typedResponse = response as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
+  if (typedResponse.output_text) {
+    return typedResponse.output_text;
+  }
+
+  return typedResponse.output
+    ?.flatMap((item) => item.content ?? [])
+    .filter((content) => content.type === "output_text" && content.text)
+    .map((content) => content.text)
+    .join("\n") ?? "";
+}
+
+async function callOpenAiJson<T>(prompt: string, apiKey: string, fallback: T): Promise<T> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: OPENAI_TEXT_MODEL,
+      instructions: "Du erzeugst ausschließlich valides JSON für eine professionelle Meeting-Intelligence-Anwendung.",
+      input: prompt
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI-Textanalyse fehlgeschlagen (${response.status}).`);
+  }
+
+  return parseJsonResponse(extractOpenAiText(await response.json()), fallback);
+}
+
+async function callAnthropicJson<T>(prompt: string, apiKey: string, fallback: T): Promise<T> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_TEXT_MODEL,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Anthropic-Textanalyse fehlgeschlagen (${response.status}).`);
+  }
+
+  const result = await response.json() as { content?: Array<{ type?: string; text?: string }> };
+  const text = result.content
+    ?.filter((content) => content.type === "text" && content.text)
+    .map((content) => content.text)
+    .join("\n") ?? "";
+
+  return parseJsonResponse(text, fallback);
+}
+
+async function routeAiRequest<T>(
+  config: AiServiceConfig | undefined,
+  mockResult: T,
+  task = "Strukturierte Meeting-Analyse",
+  input?: unknown
+): Promise<T> {
   const activeConfig = config ?? mockConfig;
 
   if (activeConfig.mode === "mock" || activeConfig.provider === "mock") {
@@ -40,13 +148,24 @@ async function routeAiRequest<T>(config: AiServiceConfig | undefined, mockResult
     return mockResult;
   }
 
-  await delay(450);
+  if (!activeConfig.apiKey) {
+    return mockResult;
+  }
 
-  // Future integration point:
-  // - activeConfig.provider === "openai": call OpenAI Responses / transcription APIs
-  // - activeConfig.provider === "anthropic": call Anthropic Messages API
-  // The UI currently requires explicit consent before reaching this branch.
-  // Until real API calls are connected, structured mock results are returned.
+  const prompt = buildJsonPrompt(task, input ?? {}, mockResult);
+
+  try {
+    if (activeConfig.provider === "openai") {
+      return await callOpenAiJson(prompt, activeConfig.apiKey, mockResult);
+    }
+
+    if (activeConfig.provider === "anthropic") {
+      return await callAnthropicJson(prompt, activeConfig.apiKey, mockResult);
+    }
+  } catch (error) {
+    console.warn(error);
+  }
+
   return mockResult;
 }
 
@@ -104,7 +223,7 @@ export async function generateMeetingPreparation(
   input: MeetingPreparationInput,
   config?: AiServiceConfig
 ): Promise<MeetingPreparationResult> {
-  return routeAiRequest(config, {
+  const mockResult: MeetingPreparationResult = {
     arguments: [
       `Das Meeting-Ziel "${input.goal || "Ziel klären"}" sollte konsequent mit dem gewünschten Ergebnis verknüpft werden.`,
       "Nutzen, Risiko und Entscheidungsbedarf früh trennen, damit die Diskussion nicht in Detailfragen abgleitet.",
@@ -125,7 +244,9 @@ export async function generateMeetingPreparation(
       "Bei Widerstand zwischen Sachrisiko, Interessenkonflikt und Timing-Problem unterscheiden.",
       "Am Ende eine klare Commit-Frage stellen: Zustimmung, Bedenken oder definierter Nacharbeitsauftrag."
     ]
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Meeting-Vorbereitung erzeugen", input);
 }
 
 export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServiceConfig): Promise<AgendaResult> {
@@ -134,7 +255,7 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
   const duration = input.duration || "60 Minuten";
   const desiredOutcome = input.desiredOutcome || "klare Entscheidung oder belastbarer Follow-up-Auftrag";
 
-  return routeAiRequest(config, {
+  const mockResult: AgendaResult = {
     refinedAgenda: [
       {
         topic: "Zielbild und Entscheidungsfrage schärfen",
@@ -213,11 +334,13 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
         "Abweichungen zwischen Agenda und tatsächlichem Verlauf im Ergebnisprotokoll markieren."
       ]
     }
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Agenda prüfen und Agenda-Abgleich vorbereiten", input);
 }
 
 export async function generateDecisionChallenge(decision: string, config?: AiServiceConfig): Promise<DecisionChallengeResult> {
-  return routeAiRequest(config, {
+  const mockResult: DecisionChallengeResult = {
     weaknesses: [
       "Die zugrunde liegenden Annahmen sind noch nicht priorisiert.",
       "Es fehlt ein klarer Abbruchpunkt für den Fall schlechter Zwischenindikatoren.",
@@ -259,11 +382,13 @@ export async function generateDecisionChallenge(decision: string, config?: AiSer
       level: "Gelb",
       rationale: "Strategisch plausibel, aber mit relevanten Umsetzungs- und Annahmerisiken. Vor Freigabe sollten Trigger, Kostenrahmen und Entscheidungslogik geschärft werden."
     }
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Entscheidung als Devil's Advocate prüfen", { decision });
 }
 
 export async function generateMeetingSimulation(config?: AiServiceConfig): Promise<MeetingScenario[]> {
-  return routeAiRequest(config, [
+  const mockResult: MeetingScenario[] = [
     {
       name: "Best Case",
       likelyFlow: ["Ziel wird akzeptiert.", "Einwände bleiben sachlich.", "Es entsteht ein klares Commitment."],
@@ -288,7 +413,9 @@ export async function generateMeetingSimulation(config?: AiServiceConfig): Promi
       turningPoints: ["Bedenken werden in Bedingungen übersetzt.", "Ein klares Follow-up verhindert diffuse Vertagung."],
       closingStatement: "Wir einigen uns auf eine bedingte Freigabe mit klaren Prüfpunkten und Verantwortlichen."
     }
-  ]);
+  ];
+
+  return routeAiRequest(config, mockResult, "Meeting-Szenarien simulieren", {});
 }
 
 export async function analyzeTranscript(transcript: string, config?: AiServiceConfig): Promise<TranscriptAnalysisResult> {
@@ -297,7 +424,7 @@ export async function analyzeTranscript(transcript: string, config?: AiServiceCo
     note: "Zeitmarke erkannt: Für spätere Detailanalyse als Referenz nutzbar."
   }));
 
-  return routeAiRequest(config, {
+  const mockResult: TranscriptAnalysisResult = {
     managementSummary:
       "Das Meeting wirkt entscheidungsnah, aber noch nicht entscheidungsreif. Nutzen und Handlungsdruck sind erkennbar; belastbare Verantwortlichkeiten, Entscheidungskriterien und Risikotoleranzen fehlen noch. Für das Management sollte der nächste Schritt eine klare Entscheidungsfrage mit Owner, Termin und prüfbaren Voraussetzungen sein.",
     summary:
@@ -378,7 +505,9 @@ export async function analyzeTranscript(transcript: string, config?: AiServiceCo
     followUpEmailDraft:
       "Betreff: Follow-up zum Meeting\n\nHallo zusammen,\n\nvielen Dank für die Diskussion. Aus meiner Sicht sollten wir bis zum nächsten Termin drei Punkte klären: erstens die konkrete Entscheidungsfrage, zweitens die offenen Budget- und Ressourcenannahmen und drittens die verantwortliche Person für die Nachverfolgung.\n\nBitte ergänzt bis zum vereinbarten Termin, welche Risiken aus eurer Sicht noch offen sind und welche Voraussetzungen für eine Entscheidung erfüllt sein müssen.\n\nViele Grüße",
     timestamps
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Transkript strategisch analysieren", { transcript });
 }
 
 export async function transcribeMeetingAudio(
@@ -410,7 +539,7 @@ export async function transcribeMeetingAudio(
 }
 
 export async function analyzeStakeholder(config?: AiServiceConfig): Promise<StakeholderAnalysisResult> {
-  return routeAiRequest(config, {
+  const mockResult: StakeholderAnalysisResult = {
     inferredInterests: ["Planbarkeit", "Einfluss auf Entscheidungskriterien", "Schutz eigener Ressourcen"],
     triggers: ["Unklare Verantwortlichkeiten", "Überraschende Budgetforderungen", "Öffentliche Festlegung ohne Vorlauf"],
     languagePatterns: ["Prüfende Fragen", "Absicherung über Zahlen", "Betonung von Machbarkeit"],
@@ -429,11 +558,13 @@ export async function analyzeStakeholder(config?: AiServiceConfig): Promise<Stak
       "Wir müssen das jetzt einfach entscheiden.",
       "Die Details klären wir später."
     ]
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Stakeholder strategisch analysieren", {});
 }
 
 export async function analyzeMeetingPatterns(config?: AiServiceConfig): Promise<MeetingPatternsResult> {
-  return routeAiRequest(config, {
+  const mockResult: MeetingPatternsResult = {
     recurringObjections: ["Zu wenig Ressourcen", "Unklare Priorisierung", "Fehlende Entscheidungsgrundlage"],
     argumentativeWeaknesses: ["Nutzen wird stark beschrieben, Entscheidungskriterium aber zu spät benannt.", "Risikoannahmen werden nicht aktiv genug quantifiziert."],
     convincingPhrases: ["Wenn wir heute A entscheiden, können wir B bis Freitag absichern.", "Der Vorschlag reduziert vor allem das Risiko X."],
@@ -444,7 +575,9 @@ export async function analyzeMeetingPatterns(config?: AiServiceConfig): Promise<
       "Einwände als Bedingungen für Zustimmung formulieren lassen.",
       "Am Ende Owner, Termin und Risikoannahme sichtbar festhalten."
     ]
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Meeting-Muster erkennen", {});
 }
 
 export async function analyzeMeetingArchives(
@@ -455,7 +588,7 @@ export async function analyzeMeetingArchives(
   const analyzedCount = archives.filter((archive) => archive.transcriptAnalysis).length;
   const agendaCount = archives.filter((archive) => archive.agenda.result).length;
 
-  return routeAiRequest(config, {
+  const mockResult: MultiMeetingArchiveAnalysisResult = {
     totalMeetings: archives.length,
     recurringObjections: [
       "Ressourcen- und Budgeteinwände tauchen in mehreren Projektakten als wiederkehrendes Muster auf.",
@@ -487,5 +620,7 @@ export async function analyzeMeetingArchives(
       "Nach jedem Meeting Entscheidungen, vertagte Punkte und Maßnahmen getrennt speichern.",
       "Für Musteranalysen mehrere Projektakten laden und insbesondere Einwände, Risiken und offene Maßnahmen vergleichen."
     ]
-  });
+  };
+
+  return routeAiRequest(config, mockResult, "Mehrere Meeting-Projektakten übergreifend analysieren", { archives });
 }
