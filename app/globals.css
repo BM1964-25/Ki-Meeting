@@ -494,6 +494,11 @@ h3 {
   color: var(--green);
 }
 
+.recording-status--requesting {
+  background: #e6f3f6;
+  color: var(--primary-dark);
+}
+
 .recording-status--recording {
   background: #fde8e7;
   color: var(--red);
@@ -502,6 +507,35 @@ h3 {
 .recording-status--paused {
   background: #fff4d6;
   color: var(--yellow);
+}
+
+.microphone-status {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.84rem;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+
+.microphone-status--angefragt {
+  background: #e6f3f6;
+  border-color: #c5e3ea;
+  color: var(--primary-dark);
+}
+
+.microphone-status--erlaubt {
+  background: #e7f6ee;
+  border-color: #b7dfc8;
+  color: var(--green);
+}
+
+.microphone-status--blockiert,
+.microphone-status--nicht-verfügbar {
+  background: #fde8e7;
+  border-color: #f5b8b2;
+  color: var(--red);
 }
 
 .speaking-indicator {

@@ -90,7 +90,8 @@ function formatTimer(seconds: number) {
 export default function Home() {
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
-  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "ready">("idle");
+  const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
+  const [microphoneStatus, setMicrophoneStatus] = useState<"unbekannt" | "angefragt" | "erlaubt" | "blockiert" | "nicht verfügbar">("unbekannt");
   const [audioLevel, setAudioLevel] = useState(0);
   const [waveformBars, setWaveformBars] = useState<number[]>(createSilentWaveform);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -240,13 +241,18 @@ export default function Home() {
       setAudioFileName("");
       setWaveformBars(createSilentWaveform());
       setRecordingSeconds(0);
+      setMicrophoneStatus("angefragt");
+      setRecordingState("requesting");
 
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-        setRecordingError("Dieser Browser unterstützt Aufnahme über Mikrofon nicht.");
+        setMicrophoneStatus("nicht verfügbar");
+        setRecordingState("idle");
+        setRecordingError("Dieser Browser unterstützt Aufnahme über Mikrofon nicht. Bitte nutze Safari, Chrome oder Edge mit Mikrofonfreigabe.");
         return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicrophoneStatus("erlaubt");
       const mediaRecorder = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       const startedAt = Date.now();
@@ -284,11 +290,12 @@ export default function Home() {
       setAudioSourceLabel("Browser-Aufnahme");
       setRecordingState("recording");
     } catch (error) {
-      setRecordingError(
-        error instanceof Error
-          ? `Aufnahme konnte nicht gestartet werden: ${error.message}`
-          : "Aufnahme konnte nicht gestartet werden."
-      );
+      const message = error instanceof Error ? error.message : "";
+      const isPermissionError = /permission|denied|notallowed/i.test(message);
+      setMicrophoneStatus(isPermissionError ? "blockiert" : "nicht verfügbar");
+      setRecordingError(isPermissionError
+        ? "Mikrofonzugriff wurde verweigert oder vom Browser blockiert. Bitte erlaube den Mikrofonzugriff in der Browser- oder Systemeinstellung und klicke danach erneut auf Start."
+        : `Aufnahme konnte nicht gestartet werden${message ? `: ${message}` : "."}`);
       setRecordingState("idle");
       startedAtRef.current = null;
       stopLevelMeter();
@@ -505,12 +512,12 @@ export default function Home() {
                     <button
                       aria-label="Neue Aufnahme starten"
                       className="recorder-start-button"
-                      disabled={recordingState === "recording" || recordingState === "paused"}
+                      disabled={recordingState === "requesting" || recordingState === "recording" || recordingState === "paused"}
                       onClick={startRecording}
                       type="button"
                     >
                       <Mic size={16} aria-hidden="true" />
-                      Start
+                      {recordingState === "requesting" ? "Freigabe ..." : "Start"}
                     </button>
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
                       {waveformBars.map((height, index) => (
@@ -556,17 +563,20 @@ export default function Home() {
                   </p>
                   <div className="recording-header">
                     <span className={`recording-status recording-status--${recordingState}`}>
-                      Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme läuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
+                      Status: {recordingState === "idle" ? "bereit" : recordingState === "requesting" ? "Mikrofonfreigabe angefragt" : recordingState === "recording" ? "Aufnahme läuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
+                    </span>
+                    <span className={`microphone-status microphone-status--${microphoneStatus.replace(" ", "-")}`}>
+                      Mikrofon: {microphoneStatus}
                     </span>
                     <span className={isSpeaking ? "speaking-indicator speaking-indicator--active" : "speaking-indicator"}>
-                      {isSpeaking ? "Sprache erkannt" : recordingState === "recording" ? "Warte auf Sprache" : "Kein Live-Signal"}
+                      {isSpeaking ? "Sprache erkannt" : recordingState === "requesting" ? "Mikrofonfreigabe angefragt" : recordingState === "recording" ? "Warte auf Sprache" : "Kein Live-Signal"}
                     </span>
                   </div>
                   <div className="level-meter" aria-label="Mikrofonpegel">
                     <div className="level-meter__bar" style={{ width: `${audioLevel}%` }} />
                   </div>
                   <ol className="recording-steps">
-                    <li className={recordingState !== "idle" ? "recording-steps__done" : ""}>Start drücken und Mikrofonzugriff erlauben.</li>
+                    <li className={recordingState !== "idle" || microphoneStatus === "blockiert" ? "recording-steps__done" : ""}>Start drücken und Mikrofonzugriff erlauben.</li>
                     <li className={recordingState === "recording" || recordingState === "paused" || recordingState === "ready" ? "recording-steps__done" : ""}>Sprechen beobachten: Pegel und Hinweis zeigen, ob Ton ankommt.</li>
                     <li className={recordingState === "ready" ? "recording-steps__done" : ""}>Stopp drücken. Danach liegt die Aufnahme temporär im Browser vor.</li>
                     <li className={audioUrl ? "recording-steps__done" : ""}>Mit Download dauerhaft als Datei speichern oder direkt transkribieren.</li>
