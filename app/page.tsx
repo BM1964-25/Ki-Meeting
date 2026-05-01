@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -47,6 +47,18 @@ import {
   TranscriptAnalysisResult
 } from "@/types/ai";
 
+type MicrophonePermissionState = PermissionState | "unbekannt" | "nicht unterstützt";
+
+type MicrophoneDiagnostics = {
+  browserLabel: string;
+  origin: string;
+  isSecureContext: boolean;
+  mediaDevicesAvailable: boolean;
+  permissionState: MicrophonePermissionState;
+  recommendation: string;
+  lastChecked: string;
+};
+
 type AreaId =
   | "dashboard"
   | "record"
@@ -82,6 +94,62 @@ const initialPreparation: MeetingPreparationInput = {
 
 const createSilentWaveform = () => Array.from({ length: 48 }, () => 8);
 
+function detectBrowser(userAgent: string) {
+  if (/edg\//i.test(userAgent)) {
+    return "Microsoft Edge";
+  }
+  if (/chrome|crios/i.test(userAgent) && !/edg\//i.test(userAgent)) {
+    return "Chrome";
+  }
+  if (/safari/i.test(userAgent) && !/chrome|crios|android/i.test(userAgent)) {
+    return "Safari";
+  }
+  if (/firefox|fxios/i.test(userAgent)) {
+    return "Firefox";
+  }
+  return "Unbekannter Browser";
+}
+
+function translatePermissionState(state: MicrophonePermissionState) {
+  const labels: Record<MicrophonePermissionState, string> = {
+    denied: "blockiert",
+    granted: "erlaubt",
+    prompt: "fragen",
+    unbekannt: "unbekannt",
+    "nicht unterstützt": "nicht unterstützt"
+  };
+
+  return labels[state];
+}
+
+function buildMicrophoneRecommendation(diagnostics: Omit<MicrophoneDiagnostics, "recommendation">) {
+  if (!diagnostics.mediaDevicesAvailable) {
+    return "Dieser Browser stellt keine Aufnahme-API bereit. Bitte Safari, Chrome oder Edge verwenden und die App über 127.0.0.1 öffnen.";
+  }
+
+  if (!diagnostics.isSecureContext) {
+    return "Die Seite läuft nicht in einer sicheren Umgebung. Öffne die App über http://127.0.0.1:3000 oder localhost.";
+  }
+
+  if (diagnostics.permissionState === "denied") {
+    if (diagnostics.browserLabel === "Safari") {
+      return "Safari meldet eine blockierte Berechtigung. Stelle Safari → Einstellungen → Websites → Mikrofon für 127.0.0.1 auf Fragen oder Erlauben und prüfe zusätzlich macOS Datenschutz & Sicherheit → Mikrofon.";
+    }
+
+    return "Der Browser meldet eine blockierte Berechtigung. Öffne die Website-Einstellungen dieser Seite, erlaube das Mikrofon und lade die App neu.";
+  }
+
+  if (diagnostics.permissionState === "prompt") {
+    return "Der Browser sollte beim nächsten Start fragen. Falls die Aufnahme trotzdem verweigert wird, ist wahrscheinlich die macOS-Mikrofonfreigabe für den Browser deaktiviert.";
+  }
+
+  if (diagnostics.permissionState === "granted") {
+    return "Der Browser meldet Mikrofonzugriff als erlaubt. Wenn kein Pegel sichtbar ist, prüfe das ausgewählte Eingabegerät in den Systemeinstellungen.";
+  }
+
+  return "Die Browser-Berechtigung konnte nicht eindeutig gelesen werden. Starte einen kurzen Test und prüfe bei einer Ablehnung Safari/Browser-Einstellungen sowie macOS-Mikrofonfreigabe.";
+}
+
 function formatTimer(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -103,6 +171,7 @@ export default function Home() {
   const [audioFileName, setAudioFileName] = useState("");
   const [recordingDurationLabel, setRecordingDurationLabel] = useState("unbekannt");
   const [recordingError, setRecordingError] = useState("");
+  const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<MicrophoneDiagnostics | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
   const [loadingAction, setLoadingAction] = useState<
     | null
@@ -175,6 +244,44 @@ export default function Home() {
       }
     };
   }, [audioUrl]);
+
+  const readMicrophonePermission = useCallback(async (): Promise<MicrophonePermissionState> => {
+    if (!navigator.permissions?.query) {
+      return "nicht unterstützt";
+    }
+
+    try {
+      const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      return status.state;
+    } catch {
+      return "nicht unterstützt";
+    }
+  }, []);
+
+  const refreshMicrophoneDiagnostics = useCallback(async () => {
+    const permissionState = await readMicrophonePermission();
+    const baseDiagnostics = {
+      browserLabel: detectBrowser(navigator.userAgent),
+      origin: window.location.origin,
+      isSecureContext: window.isSecureContext,
+      mediaDevicesAvailable: Boolean(navigator.mediaDevices?.getUserMedia),
+      permissionState,
+      lastChecked: new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    };
+
+    setMicrophoneDiagnostics({
+      ...baseDiagnostics,
+      recommendation: buildMicrophoneRecommendation(baseDiagnostics)
+    });
+  }, [readMicrophonePermission]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshMicrophoneDiagnostics();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [refreshMicrophoneDiagnostics]);
 
   function clearAudioUrl() {
     if (audioUrl) {
@@ -254,6 +361,7 @@ export default function Home() {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setMicrophoneStatus("erlaubt");
+      void refreshMicrophoneDiagnostics();
       const mediaRecorder = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       const startedAt = Date.now();
@@ -300,6 +408,7 @@ export default function Home() {
       setRecordingState("idle");
       startedAtRef.current = null;
       stopLevelMeter();
+      void refreshMicrophoneDiagnostics();
     }
   }
 
@@ -595,6 +704,50 @@ export default function Home() {
                   <div className="level-meter" aria-label="Mikrofonpegel">
                     <div className="level-meter__bar" style={{ width: `${audioLevel}%` }} />
                   </div>
+                  <div className="mic-diagnostics">
+                    <div className="mic-diagnostics__header">
+                      <div>
+                        <h3>Mikrofon-Diagnose</h3>
+                        <p>Prüft Browser, lokale Adresse und den aktuell gemeldeten Berechtigungsstatus.</p>
+                      </div>
+                      <button className="secondary-button" onClick={refreshMicrophoneDiagnostics} type="button">
+                        <RotateCcw size={16} /> Aktualisieren
+                      </button>
+                    </div>
+                    {microphoneDiagnostics ? (
+                      <>
+                        <dl className="mic-diagnostics__grid">
+                          <div>
+                            <dt>Browser</dt>
+                            <dd>{microphoneDiagnostics.browserLabel}</dd>
+                          </div>
+                          <div>
+                            <dt>Adresse</dt>
+                            <dd>{microphoneDiagnostics.origin}</dd>
+                          </div>
+                          <div>
+                            <dt>Lokale Sicherheitsfreigabe</dt>
+                            <dd>{microphoneDiagnostics.isSecureContext ? "ok" : "nicht sicher"}</dd>
+                          </div>
+                          <div>
+                            <dt>Aufnahme-API</dt>
+                            <dd>{microphoneDiagnostics.mediaDevicesAvailable ? "verfügbar" : "nicht verfügbar"}</dd>
+                          </div>
+                          <div>
+                            <dt>Browser-Berechtigung</dt>
+                            <dd>{translatePermissionState(microphoneDiagnostics.permissionState)}</dd>
+                          </div>
+                          <div>
+                            <dt>Letzte Prüfung</dt>
+                            <dd>{microphoneDiagnostics.lastChecked}</dd>
+                          </div>
+                        </dl>
+                        <p className="mic-diagnostics__recommendation">{microphoneDiagnostics.recommendation}</p>
+                      </>
+                    ) : (
+                      <p className="mic-diagnostics__recommendation">Diagnose wird vorbereitet.</p>
+                    )}
+                  </div>
                   <ol className="recording-steps">
                     <li className={recordingState !== "idle" || microphoneStatus === "blockiert" ? "recording-steps__done" : ""}>Start drücken und Mikrofonzugriff erlauben.</li>
                     <li className={recordingState === "recording" || recordingState === "paused" || recordingState === "ready" ? "recording-steps__done" : ""}>Sprechen beobachten: Pegel und Hinweis zeigen, ob Ton ankommt.</li>
@@ -615,10 +768,11 @@ export default function Home() {
                       <div className="permission-steps">
                         <h3>Mikrofon wieder freigeben</h3>
                         <ol>
-                          <li>In der Browser-Adresszeile bei `127.0.0.1` das Schloss- oder Einstellungs-Symbol öffnen.</li>
-                          <li>Für diese Seite **Mikrofon erlauben** auswählen.</li>
+                          <li>In Chrome oder Edge in der Adresszeile das Schloss- oder Einstellungs-Symbol öffnen.</li>
+                          <li>In Safari: Safari → Einstellungen → Websites → Mikrofon öffnen.</li>
+                          <li>Für 127.0.0.1 oder localhost Mikrofon auf Fragen oder Erlauben stellen.</li>
                           <li>Falls macOS blockiert: Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon öffnen und den verwendeten Browser aktivieren.</li>
-                          <li>Danach die Seite neu laden und erneut auf **Start** klicken.</li>
+                          <li>Danach die Seite neu laden und erneut auf Start klicken.</li>
                         </ol>
                       </div>
                     </div>
