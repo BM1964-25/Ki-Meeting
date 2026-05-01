@@ -973,15 +973,18 @@ export default function Home() {
             <strong>Meeting Intelligence KI</strong>
             <span>Strategie statt Mitschrift</span>
           </div>
-          <button
-            aria-label={isSidebarCollapsed ? "Navigation ausklappen" : "Navigation einklappen"}
-            className="sidebar-toggle"
-            onClick={() => setIsSidebarCollapsed((currentValue) => !currentValue)}
-            type="button"
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
-          </button>
         </div>
+        <button
+          aria-label={isSidebarCollapsed ? "Navigation ausklappen" : "Navigation einklappen"}
+          className="sidebar-toggle"
+          onClick={() => setIsSidebarCollapsed((currentValue) => !currentValue)}
+          type="button"
+        >
+          {isSidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          <span className="sidebar-toggle__label">
+            {isSidebarCollapsed ? "Ausklappen" : "Einklappen"}
+          </span>
+        </button>
         <nav className="nav-list" aria-label="Hauptbereiche">
           {navItems.map((item) => {
             const Icon = item.icon;
