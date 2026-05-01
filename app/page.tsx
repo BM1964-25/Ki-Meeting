@@ -18,6 +18,8 @@ import {
   Gauge,
   ListChecks,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pause,
   PlayCircle,
   RotateCcw,
@@ -284,6 +286,7 @@ export default function Home() {
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [anthropicConnectionState, setAnthropicConnectionState] = useState<"disconnected" | "connected" | "error">("disconnected");
   const [anthropicStatusText, setAnthropicStatusText] = useState("Nicht verbunden");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const dashboardStats = useMemo(
     () => ({
@@ -960,16 +963,24 @@ export default function Home() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={isSidebarCollapsed ? "app-shell app-shell--nav-collapsed" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand__mark">
             <Brain size={24} aria-hidden="true" />
           </div>
-          <div>
+          <div className="brand__text">
             <strong>Meeting Intelligence KI</strong>
             <span>Strategie statt Mitschrift</span>
           </div>
+          <button
+            aria-label={isSidebarCollapsed ? "Navigation ausklappen" : "Navigation einklappen"}
+            className="sidebar-toggle"
+            onClick={() => setIsSidebarCollapsed((currentValue) => !currentValue)}
+            type="button"
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          </button>
         </div>
         <nav className="nav-list" aria-label="Hauptbereiche">
           {navItems.map((item) => {
@@ -979,12 +990,13 @@ export default function Home() {
                 className={activeArea === item.id ? "nav-button nav-button--active" : "nav-button"}
                 key={item.id}
                 onClick={() => setActiveArea(item.id)}
+                title={isSidebarCollapsed ? item.label : undefined}
                 type="button"
               >
                 <span className="nav-button__icon">
                   <Icon size={18} aria-hidden="true" />
                 </span>
-                {item.label}
+                <span className="nav-button__label">{item.label}</span>
               </button>
             );
           })}
@@ -1947,13 +1959,20 @@ export default function Home() {
                   <button className="primary-button" onClick={connectAiProvider} type="button">
                     <Sparkles size={17} /> Verbinden
                   </button>
-                  <button className="secondary-button" onClick={disconnectAnthropic} type="button">
-                    <Square size={16} /> Trennen
-                  </button>
-                  <span className={`connection-state connection-state--${anthropicConnectionState}`}>
-                    {anthropicStatusText}
-                  </span>
+                  {anthropicConnectionState === "connected" && (
+                    <>
+                      <button className="secondary-button" onClick={disconnectAnthropic} type="button">
+                        <Square size={16} /> Trennen
+                      </button>
+                      <span className="connection-state connection-state--connected">
+                        Verbindung ok
+                      </span>
+                    </>
+                  )}
                 </div>
+                {anthropicConnectionState === "error" && (
+                  <p className="connection-error">{anthropicStatusText}</p>
+                )}
               </div>
               <div className="setting-row">
                 <span>Datenschutzmodus</span>

@@ -40,6 +40,11 @@ button {
   display: grid;
   grid-template-columns: 290px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 180ms ease;
+}
+
+.app-shell--nav-collapsed {
+  grid-template-columns: 86px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -55,6 +60,7 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-content: space-between;
   margin-bottom: 28px;
 }
 
@@ -84,6 +90,23 @@ button {
   margin-top: 3px;
 }
 
+.sidebar-toggle {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #dbe4ee;
+  display: inline-flex;
+  flex: 0 0 34px;
+  height: 34px;
+  justify-content: center;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
 .nav-list {
   display: grid;
   gap: 6px;
@@ -104,11 +127,43 @@ button {
   width: 100%;
 }
 
+.nav-button__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .nav-button:hover,
 .nav-button--active {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+.app-shell--nav-collapsed .sidebar {
+  padding: 24px 14px;
+}
+
+.app-shell--nav-collapsed .brand {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.app-shell--nav-collapsed .brand__text,
+.app-shell--nav-collapsed .nav-button__label {
+  display: none;
+}
+
+.app-shell--nav-collapsed .nav-button {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-height: 46px;
+  padding: 8px;
+}
+
+.app-shell--nav-collapsed .nav-button__icon {
+  width: 100%;
 }
 
 .main {
@@ -1552,6 +1607,15 @@ h3 {
 
 .connection-state--error::before {
   background: var(--red);
+}
+
+.connection-error {
+  background: #fde8e7;
+  border: 1px solid #f5b8b2;
+  border-radius: 8px;
+  color: var(--red);
+  font-weight: 700;
+  padding: 10px 12px;
 }
 
 @media (max-width: 1080px) {
