@@ -1483,6 +1483,36 @@ h3 {
   gap: 10px;
 }
 
+.api-key-field {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  max-width: 920px;
+  width: 100%;
+}
+
+.api-key-field input {
+  border-radius: 8px 0 0 8px;
+  min-width: 0;
+}
+
+.api-key-toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+}
+
+.api-key-toggle:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
 .connection-state {
   align-items: center;
   border: 1px solid var(--line);

@@ -8,6 +8,8 @@ import {
   Brain,
   ClipboardCheck,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   FolderOpen,
   Mic,
@@ -277,7 +279,9 @@ export default function Home() {
   const [stakeholder, setStakeholder] = useState<StakeholderAnalysisResult | null>(null);
   const [patternsText, setPatternsText] = useState("");
   const [patterns, setPatterns] = useState<MeetingPatternsResult | null>(null);
+  const [apiProvider, setApiProvider] = useState<"anthropic" | "openai">("anthropic");
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [anthropicConnectionState, setAnthropicConnectionState] = useState<"disconnected" | "connected" | "error">("disconnected");
   const [anthropicStatusText, setAnthropicStatusText] = useState("Nicht verbunden");
 
@@ -937,11 +941,11 @@ export default function Home() {
     }
   }
 
-  function connectAnthropic() {
+  function connectAiProvider() {
     const trimmedKey = anthropicApiKey.trim();
     if (!trimmedKey) {
       setAnthropicConnectionState("error");
-      setAnthropicStatusText("Bitte zuerst einen Anthropic API-Schlüssel eingeben.");
+      setAnthropicStatusText(`Bitte zuerst einen ${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} API-Schlüssel eingeben.`);
       return;
     }
 
@@ -1893,34 +1897,54 @@ export default function Home() {
               <h2>Einstellungen</h2>
               <div className="setting-row">
                 <span>KI-Anbieter</span>
-                <select defaultValue="anthropic"><option value="mock">Mock-Service</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option>Anderer Anbieter</option></select>
+                <select
+                  value={apiProvider}
+                  onChange={(event) => {
+                    setApiProvider(event.target.value as "anthropic" | "openai");
+                    setAnthropicConnectionState("disconnected");
+                    setAnthropicStatusText("Nicht verbunden");
+                  }}
+                >
+                  <option value="anthropic">Anthropic</option>
+                  <option value="openai">OpenAI</option>
+                </select>
               </div>
               <div className="settings-connection-panel">
                 <div>
-                  <h3>Anthropic API-Verbindung</h3>
+                  <h3>{apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} API-Verbindung</h3>
                   <p>
                     Der Schlüssel wird aktuell nur lokal im Eingabefeld geprüft. Es wird noch keine Anfrage
-                    an Anthropic gesendet.
+                    an den Anbieter gesendet.
                   </p>
                 </div>
                 <div className="setting-row">
-                  <span>Anthropic API-Schlüssel</span>
-                  <input
-                    autoComplete="off"
-                    placeholder="sk-ant-..."
-                    type="password"
-                    value={anthropicApiKey}
-                    onChange={(event) => {
-                      setAnthropicApiKey(event.target.value);
-                      if (anthropicConnectionState !== "disconnected") {
-                        setAnthropicConnectionState("disconnected");
-                        setAnthropicStatusText("Nicht verbunden");
-                      }
-                    }}
-                  />
+                  <span>{apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} API-Schlüssel</span>
+                  <div className="api-key-field">
+                    <input
+                      autoComplete="off"
+                      placeholder={apiProvider === "anthropic" ? "sk-ant-..." : "sk-..."}
+                      type={isApiKeyVisible ? "text" : "password"}
+                      value={anthropicApiKey}
+                      onChange={(event) => {
+                        setAnthropicApiKey(event.target.value);
+                        if (anthropicConnectionState !== "disconnected") {
+                          setAnthropicConnectionState("disconnected");
+                          setAnthropicStatusText("Nicht verbunden");
+                        }
+                      }}
+                    />
+                    <button
+                      aria-label={isApiKeyVisible ? "API-Schlüssel ausblenden" : "API-Schlüssel einblenden"}
+                      className="api-key-toggle"
+                      onClick={() => setIsApiKeyVisible((currentValue) => !currentValue)}
+                      type="button"
+                    >
+                      {isApiKeyVisible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="settings-actions">
-                  <button className="primary-button" onClick={connectAnthropic} type="button">
+                  <button className="primary-button" onClick={connectAiProvider} type="button">
                     <Sparkles size={17} /> Verbinden
                   </button>
                   <button className="secondary-button" onClick={disconnectAnthropic} type="button">
