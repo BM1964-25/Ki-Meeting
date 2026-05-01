@@ -37,6 +37,7 @@ import { PrivacyNotice } from "@/components/PrivacyNotice";
 import { ResultSection } from "@/components/ResultSection";
 import { RiskBadge } from "@/components/RiskBadge";
 import {
+  AiServiceConfig,
   analyzeMeetingPatterns,
   analyzeMeetingArchives,
   analyzeStakeholder,
@@ -142,6 +143,13 @@ type MeetingMetadataForm = {
   goal: string;
   desiredOutcome: string;
   status: MeetingStatus;
+};
+
+type AiConsentDialog = {
+  title: string;
+  description: string;
+  providerLabel: string;
+  resolve: (approved: boolean) => void;
 };
 
 type StoredAiSettings = {
@@ -345,6 +353,7 @@ export default function Home() {
   const [anthropicStatusText, setAnthropicStatusText] = useState(initialAiSettings.apiKey ? "Verbindung ok" : "Nicht verbunden");
   const [aiSettingsStatus, setAiSettingsStatus] = useState(initialAiSettings.apiKey ? "Gespeicherter Schlüssel lokal geladen." : "Noch kein API-Schlüssel lokal gespeichert.");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [aiConsentDialog, setAiConsentDialog] = useState<AiConsentDialog | null>(null);
 
   const dashboardStats = useMemo(
     () => ({
@@ -362,6 +371,11 @@ export default function Home() {
   const aiStatusLabel = aiMode === "api" && anthropicConnectionState === "connected"
     ? `${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} bereit`
     : "Mock-KI aktiv";
+  const activeAiConfig: AiServiceConfig = {
+    mode: aiMode,
+    provider: aiMode === "api" ? apiProvider : "mock",
+    apiKey: anthropicApiKey.trim()
+  };
   const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
   const activeChunkNumber = recordingMode === "long"
     ? Math.max(1, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)) + 1)
@@ -621,6 +635,26 @@ export default function Home() {
     }
   }
 
+  function requestAiConsent(title: string, description: string) {
+    if (activeAiConfig.mode !== "api" || anthropicConnectionState !== "connected") {
+      return Promise.resolve(true);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      setAiConsentDialog({
+        title,
+        description,
+        providerLabel: apiProvider === "anthropic" ? "Anthropic" : "OpenAI",
+        resolve
+      });
+    });
+  }
+
+  function closeAiConsentDialog(approved: boolean) {
+    aiConsentDialog?.resolve(approved);
+    setAiConsentDialog(null);
+  }
+
   function handleAudioUpload(file: File | null) {
     if (!file) {
       return;
@@ -646,10 +680,18 @@ export default function Home() {
       setTranscriptionNotice("Bitte zuerst eine Aufnahme stoppen oder eine Audiodatei hochladen.");
       return;
     }
+    const approved = await requestAiConsent(
+      "Audio transkribieren",
+      "Die ausgewählte Aufnahme würde im API-Modus an den verbundenen Anbieter übertragen, um ein Transkript zu erzeugen."
+    );
+    if (!approved) {
+      setTranscriptionNotice("Transkription wurde abgebrochen. Es wurden keine Daten extern verarbeitet.");
+      return;
+    }
     setLoadingAction("transcription");
     setTranscriptionNotice("Transkription wird erzeugt. Aktuell nutzt die App noch eine Mock-Transkription.");
     try {
-      const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel);
+      const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel, activeAiConfig);
       setTranscription(result);
       setTranscriptText(result.transcript);
       setTranscriptionNotice("Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen.");
@@ -660,9 +702,16 @@ export default function Home() {
 
   async function handlePreparation(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Meeting-Vorbereitung erzeugen",
+      "Die Meeting-Ziele, Teilnehmer, Rollen, kritischen Themen und eigene Position würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("preparation");
     try {
-      setPreparation(await generateMeetingPreparation(preparationInput));
+      setPreparation(await generateMeetingPreparation(preparationInput, activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -670,9 +719,16 @@ export default function Home() {
 
   async function handleAgenda(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Agenda prüfen",
+      "Agenda, Teilnehmer, Ziel, gewünschtes Ergebnis und spätere Abgleichsnotizen würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("agenda");
     try {
-      setAgenda(await generateAgendaWorkflow(agendaInput));
+      setAgenda(await generateAgendaWorkflow(agendaInput, activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -921,6 +977,14 @@ export default function Home() {
     if (!files?.length) {
       return;
     }
+    const approved = await requestAiConsent(
+      "Mehrere Projektakten analysieren",
+      "Die ausgewählten Projektakten würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      setArchiveStatus("Analyse wurde abgebrochen. Es wurden keine Projektakten extern verarbeitet.");
+      return;
+    }
 
     setLoadingAction("archiveAnalysis");
     try {
@@ -936,7 +1000,7 @@ export default function Home() {
           ...savedArchives.filter((archive) => !importedIds.has(archive.id))
         ].slice(0, 50));
       }
-      setArchiveAnalysis(await analyzeMeetingArchives(validArchives));
+      setArchiveAnalysis(await analyzeMeetingArchives(validArchives, activeAiConfig));
       setArchiveStatus(`${validArchives.length} Projektakten für die übergreifende Analyse geladen.`);
     } catch {
       setArchiveStatus("Mindestens eine Datei konnte nicht als Meeting-Projektakte gelesen werden.");
@@ -950,11 +1014,19 @@ export default function Home() {
       setArchiveStatus("Noch keine lokal gespeicherten Projektakten für eine Analyse vorhanden.");
       return;
     }
+    const approved = await requestAiConsent(
+      "Lokale Projektakten analysieren",
+      "Alle lokal gespeicherten Projektakten würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      setArchiveStatus("Analyse wurde abgebrochen. Es wurden keine lokalen Projektakten extern verarbeitet.");
+      return;
+    }
 
     setLoadingAction("archiveAnalysis");
     try {
       setLoadedArchiveNames(savedArchives.map((archive) => archive.metadata.title));
-      setArchiveAnalysis(await analyzeMeetingArchives(savedArchives));
+      setArchiveAnalysis(await analyzeMeetingArchives(savedArchives, activeAiConfig));
       setArchiveStatus(`${savedArchives.length} lokal gespeicherte Projektakten analysiert.`);
     } finally {
       setLoadingAction(null);
@@ -963,9 +1035,16 @@ export default function Home() {
 
   async function handleDecision(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Entscheidung prüfen",
+      "Die eingegebene Entscheidung würde im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("decision");
     try {
-      setDecision(await generateDecisionChallenge(decisionText));
+      setDecision(await generateDecisionChallenge(decisionText, activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -973,9 +1052,16 @@ export default function Home() {
 
   async function handleSimulation(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Meeting simulieren",
+      "Meeting-Ziel, Teilnehmer und Konfliktthemen würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("simulation");
     try {
-      setSimulation(await generateMeetingSimulation());
+      setSimulation(await generateMeetingSimulation(activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -983,9 +1069,16 @@ export default function Home() {
 
   async function handleTranscript(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Transkript analysieren",
+      "Der eingefügte Transkripttext würde im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("transcript");
     try {
-      setTranscript(await analyzeTranscript(transcriptText));
+      setTranscript(await analyzeTranscript(transcriptText, activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -993,9 +1086,16 @@ export default function Home() {
 
   async function handleStakeholder(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Stakeholder analysieren",
+      "Die eingegebenen Stakeholder-Daten würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("stakeholder");
     try {
-      setStakeholder(await analyzeStakeholder());
+      setStakeholder(await analyzeStakeholder(activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -1003,9 +1103,16 @@ export default function Home() {
 
   async function handlePatterns(event: FormEvent) {
     event.preventDefault();
+    const approved = await requestAiConsent(
+      "Meeting-Muster erkennen",
+      "Die eingefügten Meeting-Zusammenfassungen oder Transkripte würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      return;
+    }
     setLoadingAction("patterns");
     try {
-      setPatterns(await analyzeMeetingPatterns());
+      setPatterns(await analyzeMeetingPatterns(activeAiConfig));
     } finally {
       setLoadingAction(null);
     }
@@ -2265,6 +2372,32 @@ export default function Home() {
           </section>
         )}
       </main>
+      {aiConsentDialog && (
+        <div className="consent-backdrop" role="presentation">
+          <section aria-modal="true" className="consent-dialog" role="dialog">
+            <div>
+              <p className="eyebrow">Externe Verarbeitung</p>
+              <h2>{aiConsentDialog.title}</h2>
+              <p>
+                Anbieter: <strong>{aiConsentDialog.providerLabel}</strong>
+              </p>
+              <p>{aiConsentDialog.description}</p>
+              <p>
+                Bitte bestätige nur, wenn die Verarbeitung mit Datenschutzgrundlagen,
+                Vertraulichkeitspflichten und internen Compliance-Vorgaben vereinbar ist.
+              </p>
+            </div>
+            <div className="consent-actions">
+              <button className="secondary-button" onClick={() => closeAiConsentDialog(false)} type="button">
+                Abbrechen
+              </button>
+              <button className="primary-button" onClick={() => closeAiConsentDialog(true)} type="button">
+                Freigeben
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

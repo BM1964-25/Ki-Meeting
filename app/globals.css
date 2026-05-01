@@ -1763,6 +1763,46 @@ h3 {
   padding: 10px 12px;
 }
 
+.consent-backdrop {
+  align-items: center;
+  background: rgba(17, 24, 39, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 20;
+}
+
+.consent-dialog {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.24);
+  display: grid;
+  gap: 18px;
+  max-width: 620px;
+  padding: 22px;
+  width: min(100%, 620px);
+}
+
+.consent-dialog h2 {
+  margin-bottom: 10px;
+}
+
+.consent-dialog p {
+  color: #344054;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 1080px) {
   .app-shell {
     grid-template-columns: 1fr;
