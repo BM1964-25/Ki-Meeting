@@ -93,12 +93,10 @@ const initialPreparation: MeetingPreparationInput = {
 };
 
 const WAVEFORM_BAR_COUNT = 86;
+const FLAT_WAVEFORM_HEIGHT = 4;
 
 const createSilentWaveform = () =>
-  Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-    const softPulse = Math.sin(index * 0.72) * 3.5 + Math.cos(index * 0.27) * 2.4;
-    return Math.round(10 + softPulse);
-  });
+  Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
 
 function detectBrowser(userAgent: string) {
   if (/electron|codex/i.test(userAgent)) {
@@ -308,6 +306,7 @@ export default function Home() {
     analyserRef.current = null;
     setAudioLevel(0);
     setIsSpeaking(false);
+    setWaveformBars(createSilentWaveform());
   }
 
   function startLevelMeter(stream: MediaStream) {
@@ -335,22 +334,22 @@ export default function Home() {
       setAudioLevel(level);
       const isVoiceActive = level > 8;
       const chunkSize = Math.max(1, Math.floor(data.length / WAVEFORM_BAR_COUNT));
-      const nextBars = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-        const start = index * chunkSize;
-        const end = Math.min(data.length, start + chunkSize);
-        let chunkSum = 0;
+      const nextBars = isVoiceActive
+        ? Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
+            const start = index * chunkSize;
+            const end = Math.min(data.length, start + chunkSize);
+            let chunkSum = 0;
 
-        for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-          chunkSum += Math.abs(data[sampleIndex] - 128) / 128;
-        }
+            for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+              chunkSum += Math.abs(data[sampleIndex] - 128) / 128;
+            }
 
-        const average = chunkSum / Math.max(1, end - start);
-        const liveShape = Math.sin((index + performance.now() / 120) * 0.42) * 3;
-        const idleShape = Math.sin(index * 0.55) * 3.4 + Math.cos(index * 0.2) * 2.2;
-        const rawHeight = isVoiceActive ? 5 + average * 82 + liveShape : 7 + idleShape;
+            const average = chunkSum / Math.max(1, end - start);
+            const rawHeight = 4 + average * 86;
 
-        return Math.max(4, Math.min(42, Math.round(rawHeight)));
-      });
+            return Math.max(FLAT_WAVEFORM_HEIGHT, Math.min(42, Math.round(rawHeight)));
+          })
+        : createSilentWaveform();
 
       setWaveformBars(nextBars);
       setIsSpeaking(isVoiceActive);
@@ -653,7 +652,7 @@ export default function Home() {
                       {waveformBars.map((height, index) => (
                         <span
                           className={recordingState === "recording" && isSpeaking ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
-                          key={`${index}-${height}`}
+                          key={index}
                           style={{ height: `${height}px` }}
                         />
                       ))}

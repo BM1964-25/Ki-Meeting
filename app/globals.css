@@ -441,7 +441,7 @@ h3 {
 }
 
 .recorder-waveform::before {
-  border-top: 1px dashed #c4cbd3;
+  border-top: 1px solid #cfd6df;
   content: "";
   left: 0;
   position: absolute;
@@ -457,13 +457,15 @@ h3 {
   flex: 0 0 2px;
   min-height: 2px;
   position: relative;
-  transition: background 120ms ease, height 70ms linear, opacity 120ms linear;
+  opacity: 0;
+  transition: background 120ms ease, height 90ms linear, opacity 120ms linear;
   z-index: 1;
 }
 
 .recorder-waveform__bar--live {
   background: #125f75;
   box-shadow: 0 0 6px rgba(18, 95, 117, 0.12);
+  opacity: 1;
 }
 
 .recorder-voice-chip {
