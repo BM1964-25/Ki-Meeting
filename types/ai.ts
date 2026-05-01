@@ -38,12 +38,23 @@ export type MeetingScenario = {
 
 export type TranscriptAnalysisResult = {
   summary: string;
+  managementSummary: string;
   said: string[];
   unsaid: string[];
   avoidedTopics: string[];
   contradictions: string[];
   decisions: string[];
+  deferredDecisions: string[];
+  decisionBasis: string[];
+  counterArguments: Record<"Aufsichtsrat" | "CFO / Banker" | "Projektcontroller" | "Kunde / Wettbewerber", string[]>;
   tasks: string[];
+  actionPlan: Array<{
+    task: string;
+    owner: string;
+    due: string;
+    priority: "Hoch" | "Mittel" | "Niedrig";
+    risk: string;
+  }>;
   openPoints: string[];
   openRisks: string[];
   followUpQuestions: string[];

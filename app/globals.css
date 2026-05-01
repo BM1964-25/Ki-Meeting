@@ -1055,6 +1055,68 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.transcript-analysis-hero {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.analysis-lane {
+  display: grid;
+  gap: 12px;
+}
+
+.analysis-lane h2 {
+  margin: 0;
+}
+
+.action-plan-list {
+  display: grid;
+  gap: 12px;
+}
+
+.action-plan-item {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  padding: 16px;
+}
+
+.action-plan-item h3 {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.action-plan-item p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.action-plan-item dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.action-plan-item dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.action-plan-item dd {
+  color: var(--text);
+  font-weight: 800;
+  margin: 0;
+}
+
 .result-block {
   box-shadow: none;
   padding: 18px;
@@ -1234,6 +1296,7 @@ h3 {
   .grid--two,
   .form-grid,
   .result-grid,
+  .transcript-analysis-hero,
   .transcription-layout,
   .scenario-grid,
   .grid--metrics,
@@ -1274,6 +1337,14 @@ h3 {
   .mode-toggle {
     display: grid;
     width: 100%;
+  }
+
+  .action-plan-item {
+    grid-template-columns: 1fr;
+  }
+
+  .action-plan-item dl {
+    grid-template-columns: 1fr;
   }
 
   .recorder-composer {

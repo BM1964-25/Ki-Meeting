@@ -1121,25 +1121,76 @@ export default function Home() {
             {loadingAction === "transcript" && <LoadingIndicator label="KI analysiert das Transkript ..." />}
             {transcript && (
               <>
-                <div className="grid grid--two">
+                <div className="transcript-analysis-hero">
                   <section className="result-block">
                     <h3>Rohtranskript</h3>
-                    <p className="transcript-raw">{transcriptText}</p>
+                    <pre className="transcript-raw">{transcriptText}</pre>
                   </section>
                   <section className="result-block">
-                    <h3>KI-Zusammenfassung</h3>
+                    <h3>Management Summary</h3>
+                    <p>{transcript.managementSummary}</p>
+                  </section>
+                  <section className="result-block result-block--wide">
+                    <h3>Automatische Zusammenfassung</h3>
                     <p>{transcript.summary}</p>
                   </section>
                 </div>
+                <div className="analysis-lane">
+                  <h2>Entscheidungen</h2>
+                  <div className="result-grid">
+                    <ResultSection title="Getroffene Entscheidungen" items={transcript.decisions} />
+                    <ResultSection title="Vertagte Entscheidungen" items={transcript.deferredDecisions} />
+                    <ResultSection title="Entscheidungsgrundlage" items={transcript.decisionBasis} />
+                    <ResultSection title="Offene Voraussetzungen" items={transcript.openPoints} />
+                  </div>
+                </div>
+                <div className="analysis-lane">
+                  <h2>Nicht Gesagtes & Risiken</h2>
+                  <div className="result-grid">
+                    <ResultSection title="Was wurde nicht gesagt?" items={transcript.unsaid} />
+                    <ResultSection title="Nicht angesprochene Themen" items={transcript.avoidedTopics} />
+                    <ResultSection title="Widersprüche" items={transcript.contradictions} />
+                    <ResultSection title="Offene Risiken" items={transcript.openRisks} />
+                  </div>
+                </div>
+                <div className="analysis-lane">
+                  <h2>Simulation von Gegenargumenten</h2>
+                  <div className="result-grid">
+                    {Object.entries(transcript.counterArguments).map(([role, items]) => (
+                      <ResultSection key={role} title={role} items={items} />
+                    ))}
+                  </div>
+                </div>
+                <div className="analysis-lane">
+                  <h2>Maßnahmenplan</h2>
+                  <div className="action-plan-list">
+                    {transcript.actionPlan.map((item) => (
+                      <article className="action-plan-item" key={`${item.task}-${item.owner}`}>
+                        <div>
+                          <h3>{item.task}</h3>
+                          <p>{item.risk}</p>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Owner</dt>
+                            <dd>{item.owner}</dd>
+                          </div>
+                          <div>
+                            <dt>Frist</dt>
+                            <dd>{item.due}</dd>
+                          </div>
+                          <div>
+                            <dt>Priorität</dt>
+                            <dd>{item.priority}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
                 <div className="result-grid">
                   <ResultSection title="Was wurde gesagt?" items={transcript.said} />
-                  <ResultSection title="Was wurde nicht gesagt?" items={transcript.unsaid} />
-                  <ResultSection title="Umgangene Themen" items={transcript.avoidedTopics} />
-                  <ResultSection title="Widersprüche" items={transcript.contradictions} />
-                  <ResultSection title="Entscheidungen" items={transcript.decisions} />
                   <ResultSection title="Aufgaben / Verantwortliche" items={transcript.tasks} />
-                  <ResultSection title="Offene Punkte" items={transcript.openPoints} />
-                  <ResultSection title="Offene Risiken" items={transcript.openRisks} />
                   <ResultSection title="Empfohlene Nachfragen" items={transcript.followUpQuestions} />
                   <ResultSection title="Zeitstempel" items={transcript.timestamps.length ? transcript.timestamps.map((item) => `${item.time}: ${item.note}`) : ["Keine Zeitstempel erkannt."]} />
                   <section className="result-block result-block--wide">

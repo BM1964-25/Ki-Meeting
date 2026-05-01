@@ -127,6 +127,8 @@ export async function analyzeTranscript(transcript: string): Promise<TranscriptA
   }));
 
   return {
+    managementSummary:
+      "Das Meeting wirkt entscheidungsnah, aber noch nicht entscheidungsreif. Nutzen und Handlungsdruck sind erkennbar; belastbare Verantwortlichkeiten, Entscheidungskriterien und Risikotoleranzen fehlen noch. Für das Management sollte der nächste Schritt eine klare Entscheidungsfrage mit Owner, Termin und prüfbaren Voraussetzungen sein.",
     summary:
       "Das Meeting zeigt grundsätzlichen Abstimmungsbedarf, aber noch keine vollständig belastbare Entscheidungslage. Ziele und nächste Schritte wurden angesprochen; Entscheidungsrechte, Verantwortlichkeiten und Konsequenzen bei Nicht-Entscheidung sollten im Follow-up präzisiert werden.",
     said: ["Ziele und nächste Schritte wurden angesprochen.", "Mehrere Risiken wurden indirekt berührt."],
@@ -137,10 +139,59 @@ export async function analyzeTranscript(transcript: string): Promise<TranscriptA
       "Noch keine finale Entscheidung erkennbar.",
       "Es wurde ein weiterer Klärungs- oder Prüftermin implizit notwendig."
     ],
+    deferredDecisions: [
+      "Budget- und Ressourcenfreigabe wurden noch nicht verbindlich entschieden.",
+      "Die finale Verantwortlichkeit für die Nachverfolgung bleibt offen."
+    ],
+    decisionBasis: [
+      "Genannte Entscheidungsgrundlage: Zielerreichung, Budget, Ressourcen und Timing.",
+      "Noch fehlend: harte Abbruchkriterien, Risikotoleranz und belastbare Owner."
+    ],
+    counterArguments: {
+      Aufsichtsrat: [
+        "Governance und Entscheidungsbefugnis sind nicht ausreichend dokumentiert.",
+        "Die Risikotoleranz ist noch zu weich formuliert."
+      ],
+      "CFO / Banker": [
+        "Budget- und Liquiditätseffekte sind noch nicht belastbar abgegrenzt.",
+        "Der Business Case braucht klarere Annahmen und Sensitivitäten."
+      ],
+      Projektcontroller: [
+        "Ohne Owner, Termin und Meilenstein bleibt die Umsetzung nicht steuerbar.",
+        "Ressourcenrisiken wurden angesprochen, aber nicht in Maßnahmen übersetzt."
+      ],
+      "Kunde / Wettbewerber": [
+        "Der Kundennutzen wurde noch nicht scharf genug gegenüber Alternativen positioniert.",
+        "Ein Wettbewerber könnte Verzögerungen ausnutzen, wenn keine klare Entscheidung folgt."
+      ]
+    },
     tasks: [
       "Entscheiderkreis und finale Entscheidungsbefugnis schriftlich festhalten.",
       "Offene Budget- und Ressourcenannahmen bis zum nächsten Termin validieren.",
       "Verantwortliche Person für die Nachverfolgung benennen."
+    ],
+    actionPlan: [
+      {
+        task: "Konkrete Entscheidungsfrage formulieren und vorab verteilen.",
+        owner: "Meeting-Owner",
+        due: "vor dem nächsten Termin",
+        priority: "Hoch",
+        risk: "Ohne klare Frage wird erneut nur diskutiert statt entschieden."
+      },
+      {
+        task: "Budget- und Ressourcenannahmen validieren.",
+        owner: "Controlling / Fachbereich",
+        due: "innerhalb von 5 Arbeitstagen",
+        priority: "Hoch",
+        risk: "Die Entscheidung bleibt angreifbar, wenn zentrale Annahmen offen sind."
+      },
+      {
+        task: "Offene Risiken und akzeptierte Risiken trennen.",
+        owner: "Projektleitung",
+        due: "bis zum Follow-up",
+        priority: "Mittel",
+        risk: "Risiken werden sonst weiter sprachlich weich behandelt."
+      }
     ],
     openPoints: [
       "Welche Entscheidung soll beim nächsten Termin konkret getroffen werden?",
