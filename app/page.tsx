@@ -297,6 +297,7 @@ export default function Home() {
   const [recordingMode, setRecordingMode] = useState<"standard" | "long">("standard");
   const [chunkLengthMinutes, setChunkLengthMinutes] = useState<(typeof chunkLengthOptions)[number]>(5);
   const [transcriptionNotice, setTranscriptionNotice] = useState("Noch kein Audio für die Transkription vorhanden.");
+  const [transcriptionError, setTranscriptionError] = useState("");
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState<MicrophoneDiagnostics | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
   const [loadingAction, setLoadingAction] = useState<
@@ -536,6 +537,7 @@ export default function Home() {
       clearAudioUrl();
       stopLevelMeter();
       setTranscription(null);
+      setTranscriptionError("");
       setRecordingError("");
       setTranscriptionNotice("Aufnahme läuft. Nach Stop kann die Audiodatei transkribiert werden.");
       setAudioBlob(null);
@@ -672,6 +674,7 @@ export default function Home() {
     setRecordingState("ready");
     setRecordingError("");
     setTranscription(null);
+    setTranscriptionError("");
     setTranscriptionNotice("Audiodatei ist bereit. Klicke auf „Transkription erzeugen“.");
   }
 
@@ -682,19 +685,30 @@ export default function Home() {
     }
     const approved = await requestAiConsent(
       "Audio transkribieren",
-      "Die ausgewählte Aufnahme würde im API-Modus an den verbundenen Anbieter übertragen, um ein Transkript zu erzeugen."
+      activeAiConfig.provider === "openai"
+        ? "Die ausgewählte Aufnahme wird an OpenAI übertragen, um ein echtes Rohtranskript zu erzeugen."
+        : "Die ausgewählte Aufnahme würde im API-Modus an den verbundenen Anbieter übertragen, um ein Transkript zu erzeugen."
     );
     if (!approved) {
       setTranscriptionNotice("Transkription wurde abgebrochen. Es wurden keine Daten extern verarbeitet.");
       return;
     }
     setLoadingAction("transcription");
-    setTranscriptionNotice("Transkription wird erzeugt. Aktuell nutzt die App noch eine Mock-Transkription.");
+    setTranscriptionError("");
+    setTranscriptionNotice(activeAiConfig.mode === "api" && activeAiConfig.provider === "openai"
+      ? "Echte Transkription über OpenAI wird erzeugt ..."
+      : "Transkription wird erzeugt. Aktuell nutzt die App eine Mock-Transkription.");
     try {
-      const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel, activeAiConfig);
+      const result = await transcribeMeetingAudio(audioBlob, audioSourceLabel || "Audiodatei", recordingDurationLabel, activeAiConfig);
       setTranscription(result);
       setTranscriptText(result.transcript);
-      setTranscriptionNotice("Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen.");
+      setTranscriptionNotice(result.provider === "OpenAI"
+        ? "Echtes Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen."
+        : "Mock-Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Transkription konnte nicht erzeugt werden.";
+      setTranscriptionError(message);
+      setTranscriptionNotice("Transkription fehlgeschlagen. Bitte Einstellungen, Anbieter und Dateigröße prüfen.");
     } finally {
       setLoadingAction(null);
     }
@@ -1850,9 +1864,10 @@ export default function Home() {
                   {transcription ? "Transkript bereit" : "Wartet auf Audio"}
                 </span>
               </div>
-              <p className="result-note">
-                {transcriptionNotice}
-              </p>
+                <p className="result-note">
+                  {transcriptionNotice}
+                </p>
+              {transcriptionError && <p className="recording-error">{transcriptionError}</p>}
               {loadingAction === "transcription" && <LoadingIndicator label="KI arbeitet am Transkript ..." />}
               <div className="transcription-layout">
                 <section className="result-block">
@@ -1860,7 +1875,9 @@ export default function Home() {
                   <p><strong>Quelle:</strong> {transcription?.sourceLabel ?? "keine Audiodatei ausgewählt"}</p>
                   <p><strong>Dauer:</strong> {transcription?.durationLabel ?? "noch unbekannt"}</p>
                   <p><strong>Qualität:</strong> {transcription?.confidence ?? "noch nicht erzeugt"}</p>
-                  <p><strong>Hinweis:</strong> Die aktuelle Version erzeugt ein Mock-Transkript. Eine echte Audio-zu-Text-API ist noch nicht angebunden.</p>
+                  <p><strong>Anbieter:</strong> {transcription?.provider ?? (activeAiConfig.mode === "api" ? (activeAiConfig.provider === "openai" ? "OpenAI vorbereitet" : "Anthropic vorbereitet") : "Mock")}</p>
+                  <p><strong>Modell:</strong> {transcription?.model ?? (activeAiConfig.mode === "api" && activeAiConfig.provider === "openai" ? "gpt-4o-mini-transcribe" : "noch nicht erzeugt")}</p>
+                  <p><strong>Hinweis:</strong> {transcription?.note ?? "OpenAI kann im API-Modus echte Transkripte erzeugen. Anthropic ist für Audio-Transkription noch nicht angebunden."}</p>
                 </section>
                 <section className="result-block result-block--wide">
                   <h3>Rohtranskript</h3>

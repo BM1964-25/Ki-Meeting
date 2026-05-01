@@ -29,6 +29,9 @@ const mockConfig: AiServiceConfig = {
   provider: "mock"
 };
 
+const OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const MAX_TRANSCRIPTION_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 async function routeAiRequest<T>(config: AiServiceConfig | undefined, mockResult: T): Promise<T> {
   const activeConfig = config ?? mockConfig;
 
@@ -45,6 +48,56 @@ async function routeAiRequest<T>(config: AiServiceConfig | undefined, mockResult
   // The UI currently requires explicit consent before reaching this branch.
   // Until real API calls are connected, structured mock results are returned.
   return mockResult;
+}
+
+function createMockTranscriptionResult(sourceLabel: string, durationLabel: string): TranscriptionResult {
+  return {
+    sourceLabel,
+    durationLabel,
+    confidence: "Mock",
+    provider: "Mock",
+    model: "mock-transcription",
+    note: "Mock-Transkription. Es wurde kein Audio extern verarbeitet.",
+    transcript:
+      "00:00 Begrüßung und Zielklärung. 00:45 Der Teilnehmerkreis diskutiert die Entscheidungsfrage und benennt Budget, Ressourcen und Timing als kritische Punkte. 02:10 Ein Einwand zur Umsetzbarkeit wird aufgenommen. 03:20 Die Runde vereinbart, offene Annahmen bis zum nächsten Termin zu prüfen und Verantwortlichkeiten festzuhalten."
+  };
+}
+
+async function transcribeWithOpenAi(audioBlob: Blob, sourceLabel: string, durationLabel: string, apiKey: string): Promise<TranscriptionResult> {
+  if (audioBlob.size > MAX_TRANSCRIPTION_UPLOAD_BYTES) {
+    throw new Error("Die Audiodatei ist größer als 25 MB. Bitte kürzere Abschnitte aufnehmen oder die Datei komprimieren.");
+  }
+
+  const fileName = sourceLabel && /\.[a-z0-9]+$/i.test(sourceLabel) ? sourceLabel : "meeting-audio.webm";
+  const formData = new FormData();
+  formData.append("file", audioBlob, fileName);
+  formData.append("model", OPENAI_TRANSCRIPTION_MODEL);
+  formData.append("response_format", "json");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI-Transkription fehlgeschlagen (${response.status}): ${errorText.slice(0, 240)}`);
+  }
+
+  const result = await response.json() as { text?: string };
+
+  return {
+    sourceLabel,
+    durationLabel,
+    confidence: "Hoch",
+    provider: "OpenAI",
+    model: OPENAI_TRANSCRIPTION_MODEL,
+    note: "Echte Transkription über OpenAI Audio Transcriptions API.",
+    transcript: result.text?.trim() || "OpenAI hat keinen Transkripttext zurückgegeben."
+  };
 }
 
 export async function generateMeetingPreparation(
@@ -329,17 +382,31 @@ export async function analyzeTranscript(transcript: string, config?: AiServiceCo
 }
 
 export async function transcribeMeetingAudio(
+  audioBlob: Blob | null,
   sourceLabel: string,
   durationLabel = "unbekannt",
   config?: AiServiceConfig
 ): Promise<TranscriptionResult> {
-  return routeAiRequest(config, {
-    sourceLabel,
-    durationLabel,
-    confidence: "Mock",
-    transcript:
-      "00:00 Begrüßung und Zielklärung. 00:45 Der Teilnehmerkreis diskutiert die Entscheidungsfrage und benennt Budget, Ressourcen und Timing als kritische Punkte. 02:10 Ein Einwand zur Umsetzbarkeit wird aufgenommen. 03:20 Die Runde vereinbart, offene Annahmen bis zum nächsten Termin zu prüfen und Verantwortlichkeiten festzuhalten."
-  });
+  const activeConfig = config ?? mockConfig;
+
+  if (activeConfig.mode === "mock" || activeConfig.provider === "mock") {
+    await delay(450);
+    return createMockTranscriptionResult(sourceLabel, durationLabel);
+  }
+
+  if (!audioBlob) {
+    throw new Error("Keine Audiodatei für die Transkription vorhanden.");
+  }
+
+  if (!activeConfig.apiKey) {
+    throw new Error("Kein API-Schlüssel für die Transkription vorhanden.");
+  }
+
+  if (activeConfig.provider === "openai") {
+    return transcribeWithOpenAi(audioBlob, sourceLabel, durationLabel, activeConfig.apiKey);
+  }
+
+  throw new Error("Anthropic ist für Audio-Transkription noch nicht angebunden. Bitte OpenAI für echte Transkription wählen oder Mock-KI verwenden.");
 }
 
 export async function analyzeStakeholder(config?: AiServiceConfig): Promise<StakeholderAnalysisResult> {

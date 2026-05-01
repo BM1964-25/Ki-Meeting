@@ -99,6 +99,9 @@ export type TranscriptionResult = {
   durationLabel: string;
   sourceLabel: string;
   confidence: "Mock" | "Niedrig" | "Mittel" | "Hoch";
+  provider: "Mock" | "OpenAI" | "Anthropic";
+  model: string;
+  note: string;
 };
 
 export type StakeholderAnalysisResult = {
