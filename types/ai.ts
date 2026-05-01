@@ -138,6 +138,7 @@ export type MeetingArchive = {
   appVersion: string;
   metadata: {
     title: string;
+    project?: string;
     date: string;
     status: "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
     participants: string;

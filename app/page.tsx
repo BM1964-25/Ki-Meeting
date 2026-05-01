@@ -141,6 +141,7 @@ type MeetingStatus = "geplant" | "aufgenommen" | "transkribiert" | "analysiert" 
 
 type MeetingMetadataForm = {
   title: string;
+  project: string;
   date: string;
   participants: string;
   goal: string;
@@ -165,6 +166,7 @@ type ExportKind = "management" | "actions" | "decision" | "full";
 
 const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
   title: "Neue Meeting-Akte",
+  project: "",
   date: new Date().toISOString().slice(0, 10),
   participants: "",
   goal: "",
@@ -338,6 +340,9 @@ export default function Home() {
   const [loadedArchiveNames, setLoadedArchiveNames] = useState<string[]>([]);
   const [savedArchives, setSavedArchives] = useState<MeetingArchive[]>(loadSavedArchivesFromStorage);
   const [currentArchiveId, setCurrentArchiveId] = useState(() => `meeting-${Date.now()}`);
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
+  const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
   const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
@@ -396,6 +401,38 @@ export default function Home() {
   const completedChunkCount = recordingMode === "long"
     ? Math.max(0, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)))
     : 0;
+  const archiveProjects = useMemo(() => {
+    const projects = savedArchives
+      .map((archive) => archive.metadata.project?.trim())
+      .filter((project): project is string => Boolean(project));
+    return Array.from(new Set(projects)).sort((first, second) => first.localeCompare(second, "de"));
+  }, [savedArchives]);
+  const filteredArchives = useMemo(() => {
+    const query = archiveSearch.trim().toLowerCase();
+
+    return savedArchives.filter((archive) => {
+      const project = archive.metadata.project?.trim() || "";
+      const statusMatches = archiveStatusFilter === "alle" || archive.metadata.status === archiveStatusFilter;
+      const projectMatches = archiveProjectFilter === "alle" || project === archiveProjectFilter;
+      const searchText = [
+        archive.metadata.title,
+        project,
+        archive.metadata.date,
+        archive.metadata.status,
+        archive.metadata.participants,
+        archive.metadata.goal,
+        archive.metadata.desiredOutcome,
+        archive.transcription.rawText,
+        archive.transcriptAnalysis?.managementSummary,
+        archive.transcriptAnalysis?.decisions.join(" "),
+        archive.transcriptAnalysis?.openPoints.join(" "),
+        archive.transcriptAnalysis?.actionPlan.map((item) => `${item.task} ${item.owner} ${item.risk}`).join(" ")
+      ].filter(Boolean).join(" ").toLowerCase();
+      const queryMatches = !query || searchText.includes(query);
+
+      return statusMatches && projectMatches && queryMatches;
+    });
+  }, [archiveProjectFilter, archiveSearch, archiveStatusFilter, savedArchives]);
   const qualityReview: AiQualityReview = useMemo(() => {
     const missingInputs = [
       !hasMeaningfulText(currentMeetingTitle) || currentMeetingTitle === "Neue Meeting-Akte" ? "Meeting-Titel präzisieren" : "",
@@ -895,6 +932,7 @@ export default function Home() {
       appVersion: "Meeting Intelligence KI Arbeitsversion",
       metadata: {
         title: currentMeetingTitle,
+        project: meetingMetadata.project.trim(),
         date: meetingMetadata.date,
         status,
         participants: meetingMetadata.participants || agendaInput.participants || preparationInput.participants,
@@ -986,6 +1024,7 @@ export default function Home() {
     const lines = [
       `# ${archive.metadata.title}`,
       "",
+      `Projekt: ${archive.metadata.project || "nicht zugeordnet"}`,
       `Datum: ${archive.metadata.date}`,
       `Status: ${archive.metadata.status}`,
       `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
@@ -1038,6 +1077,7 @@ export default function Home() {
     const header = [
       `# ${kind === "management" ? "Management-Protokoll" : kind === "actions" ? "Maßnahmenliste" : kind === "decision" ? "Entscheidungsnotiz" : "Projektaktenbericht"}: ${title}`,
       "",
+      `Projekt: ${archive.metadata.project || "nicht zugeordnet"}`,
       `Datum: ${archive.metadata.date}`,
       `Status: ${archive.metadata.status}`,
       `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
@@ -1117,6 +1157,7 @@ export default function Home() {
     setCurrentArchiveId(archive.id || `meeting-${Date.now()}`);
     setMeetingMetadata({
       title: archive.metadata.title || "Geladene Meeting-Akte",
+      project: archive.metadata.project || "",
       date: archive.metadata.date || new Date().toISOString().slice(0, 10),
       participants: archive.metadata.participants,
       goal: archive.metadata.goal,
@@ -1219,6 +1260,30 @@ export default function Home() {
       setLoadedArchiveNames(savedArchives.map((archive) => archive.metadata.title));
       setArchiveAnalysis(await analyzeMeetingArchives(savedArchives, activeAiConfig));
       setArchiveStatus(`${savedArchives.length} lokal gespeicherte Projektakten analysiert.`);
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function analyzeFilteredMeetingArchives() {
+    if (filteredArchives.length === 0) {
+      setArchiveStatus("Der aktuelle Filter enthält keine Projektakten für eine Analyse.");
+      return;
+    }
+    const approved = await requestAiConsent(
+      "Gefilterte Projektakten analysieren",
+      "Die aktuell gefilterten Projektakten würden im API-Modus an den verbundenen Anbieter gesendet."
+    );
+    if (!approved) {
+      setArchiveStatus("Analyse wurde abgebrochen. Es wurden keine gefilterten Projektakten extern verarbeitet.");
+      return;
+    }
+
+    setLoadingAction("archiveAnalysis");
+    try {
+      setLoadedArchiveNames(filteredArchives.map((archive) => archive.metadata.title));
+      setArchiveAnalysis(await analyzeMeetingArchives(filteredArchives, activeAiConfig));
+      setArchiveStatus(`${filteredArchives.length} gefilterte Projektakten analysiert.`);
     } finally {
       setLoadingAction(null);
     }
@@ -1447,7 +1512,7 @@ export default function Home() {
           <div>
             <span className="quality-panel__eyebrow">Aktuelle Meeting-Akte</span>
             <strong>{currentMeetingTitle}</strong>
-            <p>ID: {currentArchiveId} · Status: {meetingMetadata.status}</p>
+            <p>ID: {currentArchiveId} · Projekt: {meetingMetadata.project || "nicht zugeordnet"} · Status: {meetingMetadata.status}</p>
           </div>
           <div className={`quality-score quality-score--${qualityReview.level.toLowerCase()}`}>
             <span>{qualityReview.score}/100</span>
@@ -1525,6 +1590,9 @@ export default function Home() {
               <div className="meeting-file-form">
                 <Field label="Meeting-Titel">
                   <input value={meetingMetadata.title} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, title: event.target.value })} />
+                </Field>
+                <Field label="Projekt / Mandat">
+                  <input placeholder="z. B. CRM-Rollout, Strategie 2026, Kunde A" value={meetingMetadata.project} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, project: event.target.value })} />
                 </Field>
                 <Field label="Datum">
                   <input type="date" value={meetingMetadata.date} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, date: event.target.value })} />
@@ -1654,6 +1722,9 @@ export default function Home() {
                   <button className="primary-button" disabled={savedArchives.length === 0} onClick={analyzeSavedMeetingArchives} type="button">
                     <Archive size={17} /> Lokale Akten analysieren
                   </button>
+                  <button className="secondary-button" disabled={filteredArchives.length === 0} onClick={analyzeFilteredMeetingArchives} type="button">
+                    <FileSearch size={17} /> Gefilterte Akten analysieren
+                  </button>
                   <label className="secondary-button archive-file-button">
                     <Files size={17} aria-hidden="true" />
                     Mehrere Projektakten auswählen
@@ -1664,6 +1735,43 @@ export default function Home() {
             </div>
 
             <p className="result-note">{archiveStatus}</p>
+            <section className="library-panel">
+              <div>
+                <h2>Lokale Bibliothek</h2>
+                <p className="lead">
+                  Suche und filtere gespeicherte Akten nach Projekt, Status, Teilnehmern, Zielen, Transkriptinhalten,
+                  Entscheidungen und Maßnahmen. Treffer können direkt wiederhergestellt oder gemeinsam analysiert werden.
+                </p>
+              </div>
+              <div className="library-controls">
+                <Field label="Suche">
+                  <input placeholder="Titel, Projekt, Teilnehmer, Entscheidung, Maßnahme ..." value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} />
+                </Field>
+                <Field label="Projekt">
+                  <select value={archiveProjectFilter} onChange={(event) => setArchiveProjectFilter(event.target.value)}>
+                    <option value="alle">alle Projekte</option>
+                    {archiveProjects.map((project) => (
+                      <option key={project} value={project}>{project}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Status">
+                  <select value={archiveStatusFilter} onChange={(event) => setArchiveStatusFilter(event.target.value as MeetingStatus | "alle")}>
+                    <option value="alle">alle Status</option>
+                    <option value="geplant">geplant</option>
+                    <option value="aufgenommen">aufgenommen</option>
+                    <option value="transkribiert">transkribiert</option>
+                    <option value="analysiert">analysiert</option>
+                    <option value="abgeschlossen">abgeschlossen</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="library-summary">
+                <span>{filteredArchives.length} von {savedArchives.length} Akten sichtbar</span>
+                <span>{archiveProjects.length} Projekte</span>
+                <span>{currentArchiveId ? "Wiederherstellung aktiv" : "keine Akte geladen"}</span>
+              </div>
+            </section>
             <div className="analysis-lane">
               <h2>Qualitätsprüfung der aktuellen Akte</h2>
               <div className="result-grid">
@@ -1681,11 +1789,11 @@ export default function Home() {
               <section className="result-block result-block--wide">
                 <h3>Lokale Meeting-Übersicht</h3>
                 <div className="archive-table">
-                  {savedArchives.map((archive) => (
+                  {filteredArchives.map((archive) => (
                     <article className="archive-row" key={archive.id}>
                       <div>
                         <strong>{archive.metadata.title}</strong>
-                        <span>{archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
+                        <span>{archive.metadata.project || "ohne Projekt"} · {archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
                       </div>
                       <div>
                         <span>{archive.transcription.rawText ? "Transkript vorhanden" : "ohne Transkript"}</span>
@@ -1704,6 +1812,9 @@ export default function Home() {
                       </div>
                     </article>
                   ))}
+                  {filteredArchives.length === 0 && (
+                    <p className="result-note">Keine Akten passen zu Suche und Filter.</p>
+                  )}
                 </div>
               </section>
             )}

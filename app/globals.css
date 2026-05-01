@@ -662,6 +662,41 @@ h3 {
   width: 1px;
 }
 
+.library-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.library-panel h2 {
+  margin-bottom: 8px;
+}
+
+.library-controls {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(280px, 1.4fr) minmax(180px, 0.8fr) minmax(180px, 0.8fr);
+}
+
+.library-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-summary span {
+  background: #f4f8fa;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
 .archive-table {
   display: grid;
   gap: 10px;
@@ -2023,6 +2058,7 @@ h3 {
   .archive-intro,
   .archive-grid,
   .archive-row,
+  .library-controls,
   .protocol-grid,
   .measure-row,
   .decision-action-summary,
