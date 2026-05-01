@@ -52,6 +52,7 @@ import {
 import {
   AgendaInput,
   AgendaResult,
+  AiQualityReview,
   DecisionChallengeResult,
   MeetingPatternsResult,
   MeetingArchive,
@@ -132,6 +133,7 @@ const WAVEFORM_FRAME_SKIP = 3;
 const chunkLengthOptions = [1, 5, 10] as const;
 const MEETING_ARCHIVE_STORAGE_KEY = "meeting-intelligence-ki.archives.v1";
 const AI_SETTINGS_STORAGE_KEY = "meeting-intelligence-ki.ai-settings.v1";
+const OPENAI_AUDIO_UPLOAD_LIMIT_MB = 25;
 
 type AiProvider = "anthropic" | "openai";
 type AiMode = "mock" | "api";
@@ -158,6 +160,8 @@ type StoredAiSettings = {
   mode: AiMode;
   apiKey: string;
 };
+
+type ExportKind = "management" | "actions" | "decision" | "full";
 
 const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
   title: "Neue Meeting-Akte",
@@ -278,6 +282,10 @@ function formatTimer(seconds: number) {
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function hasMeaningfulText(value: string | undefined, minLength = 8) {
+  return Boolean(value && value.trim().length >= minLength);
+}
+
 export default function Home() {
   const initialAiSettings = useMemo(() => loadAiSettingsFromStorage(), []);
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
@@ -329,6 +337,7 @@ export default function Home() {
   const [archiveStatus, setArchiveStatus] = useState("Noch keine Projektakte gespeichert oder geladen.");
   const [loadedArchiveNames, setLoadedArchiveNames] = useState<string[]>([]);
   const [savedArchives, setSavedArchives] = useState<MeetingArchive[]>(loadSavedArchivesFromStorage);
+  const [currentArchiveId, setCurrentArchiveId] = useState(() => `meeting-${Date.now()}`);
   const [archiveAnalysis, setArchiveAnalysis] = useState<MultiMeetingArchiveAnalysisResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
@@ -387,6 +396,70 @@ export default function Home() {
   const completedChunkCount = recordingMode === "long"
     ? Math.max(0, Math.floor(recordingSeconds / (chunkLengthMinutes * 60)))
     : 0;
+  const qualityReview: AiQualityReview = useMemo(() => {
+    const missingInputs = [
+      !hasMeaningfulText(currentMeetingTitle) || currentMeetingTitle === "Neue Meeting-Akte" ? "Meeting-Titel präzisieren" : "",
+      !hasMeaningfulText(meetingMetadata.goal || agendaInput.meetingGoal || preparationInput.goal) ? "Meeting-Ziel ergänzen" : "",
+      !hasMeaningfulText(meetingMetadata.participants || agendaInput.participants || preparationInput.participants) ? "Teilnehmer und Rollen ergänzen" : "",
+      !hasMeaningfulText(meetingMetadata.desiredOutcome || agendaInput.desiredOutcome || preparationInput.desiredOutcome) ? "Gewünschtes Ergebnis festlegen" : "",
+      !hasMeaningfulText(agendaInput.existingAgenda || agendaInput.agendaText) && !agenda ? "Agenda erfassen oder erzeugen" : "",
+      !hasMeaningfulText(transcriptText, 40) && !transcription ? "Rohtranskript oder Ergebnisnotizen erfassen" : "",
+      !transcript ? "Transkriptanalyse erzeugen" : "",
+      !decision && !transcript?.decisions.length ? "Entscheidungen prüfen oder aus Transkript ableiten" : ""
+    ].filter(Boolean);
+    const completedSignals = 8 - missingInputs.length;
+    const score = Math.max(10, Math.min(100, Math.round((completedSignals / 8) * 100)));
+    const level: AiQualityReview["level"] = score >= 75 ? "Hoch" : score >= 45 ? "Mittel" : "Niedrig";
+    const assumptions = [
+      lastAiResultMeta?.source === "Mock" ? "Aktuelle Ergebnisse stammen aus Mock-Logik und dienen als strukturierte Arbeitsvorlage." : "",
+      lastAiResultMeta?.source === "OpenAI" ? "Letzte Textanalyse wurde über OpenAI erzeugt; Ergebnis sollte fachlich plausibilisiert werden." : "",
+      lastAiResultMeta?.source === "Anthropic" ? "Letzte Textanalyse wurde über Anthropic erzeugt; Ergebnis sollte fachlich plausibilisiert werden." : "",
+      transcription?.confidence === "Mock" ? "Das Transkript ist kein echtes Wortprotokoll, sondern eine Mock-Rohfassung." : "",
+      !transcript ? "Maßnahmen, Entscheidungen und Risiken sind noch nicht aus einem vollständigen Transkript abgeleitet." : ""
+    ].filter(Boolean);
+    const reliabilityNotes = [
+      `Belastbarkeit: ${level} (${score}/100).`,
+      missingInputs.length ? `${missingInputs.length} zentrale Eingaben fehlen noch.` : "Zentrale Eingaben sind für eine belastbare Analyse vorhanden.",
+      lastAiResultMeta?.fallback ? "Es gab einen Fallback auf Mock-KI; Ergebnis nicht als echte KI-Auswertung behandeln." : "Kein aktueller Fallback-Hinweis vorhanden.",
+      audioBlob && !transcription ? "Audio liegt vor, ist aber noch nicht transkribiert." : "",
+      transcript?.actionPlan.length ? "Maßnahmenplan ist vorhanden und kann exportiert werden." : "Maßnahmenplan fehlt noch oder ist leer."
+    ].filter(Boolean);
+    const recommendedNextChecks = [
+      missingInputs[0] ?? "Management Summary und Maßnahmenplan fachlich gegenprüfen.",
+      transcript?.openRisks.length ? "Offene Risiken priorisieren und Owner vergeben." : "Risikoabschnitt auf Vollständigkeit prüfen.",
+      transcript?.deferredDecisions.length ? "Vertagte Entscheidungen terminieren." : "Entscheidungen explizit dokumentieren.",
+      "Vor Export prüfen, ob personenbezogene Daten und Vertraulichkeit korrekt behandelt werden."
+    ];
+
+    return {
+      level,
+      score,
+      missingInputs,
+      assumptions: assumptions.length ? assumptions : ["Es werden nur lokal eingegebene Daten und die zuletzt gewählte KI-Konfiguration berücksichtigt."],
+      reliabilityNotes,
+      recommendedNextChecks
+    };
+  }, [
+    agenda,
+    agendaInput.agendaText,
+    agendaInput.desiredOutcome,
+    agendaInput.existingAgenda,
+    agendaInput.meetingGoal,
+    agendaInput.participants,
+    audioBlob,
+    currentMeetingTitle,
+    decision,
+    lastAiResultMeta,
+    meetingMetadata.desiredOutcome,
+    meetingMetadata.goal,
+    meetingMetadata.participants,
+    preparationInput.desiredOutcome,
+    preparationInput.goal,
+    preparationInput.participants,
+    transcript,
+    transcriptText,
+    transcription
+  ]);
 
   useEffect(() => {
     if (recordingState !== "recording" || !startedAtRef.current) {
@@ -686,6 +759,11 @@ export default function Home() {
       setTranscriptionNotice("Bitte zuerst eine Aufnahme stoppen oder eine Audiodatei hochladen.");
       return;
     }
+    if (activeAiConfig.mode === "api" && activeAiConfig.provider === "openai" && audioBlob.size > OPENAI_AUDIO_UPLOAD_LIMIT_MB * 1024 * 1024) {
+      setTranscriptionError(`Die Audiodatei ist größer als ${OPENAI_AUDIO_UPLOAD_LIMIT_MB} MB. Bitte lade eine kürzere Datei oder teile die Aufnahme in Abschnitte.`);
+      setTranscriptionNotice("Transkription wurde nicht gestartet, weil die Datei für den aktuellen OpenAI-Upload zu groß ist.");
+      return;
+    }
     const approved = await requestAiConsent(
       "Audio transkribieren",
       activeAiConfig.provider === "openai"
@@ -812,7 +890,7 @@ export default function Home() {
 
     return {
       schemaVersion: 1,
-      id: `meeting-${Date.now()}`,
+      id: currentArchiveId,
       savedAt: new Date().toISOString(),
       appVersion: "Meeting Intelligence KI Arbeitsversion",
       metadata: {
@@ -845,7 +923,8 @@ export default function Home() {
       decisionChallenge: decision,
       simulation,
       stakeholderAnalysis: stakeholder,
-      patternAnalysis: patterns
+      patternAnalysis: patterns,
+      qualityReview
     };
   }
 
@@ -877,16 +956,20 @@ export default function Home() {
   }
 
   function downloadArchive(archive: MeetingArchive) {
-    const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
+    downloadTextFile(JSON.stringify(archive, null, 2), createArchiveFileName(archive.metadata.title), "application/json");
+    setArchiveStatus(`Projektakte vorbereitet: ${createArchiveFileName(archive.metadata.title)}. Die Datei wird über den Browser-Download gespeichert.`);
+  }
+
+  function downloadTextFile(content: string, fileName: string, type: string) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = createArchiveFileName(archive.metadata.title);
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setArchiveStatus(`Projektakte vorbereitet: ${link.download}. Die Datei wird über den Browser-Download gespeichert.`);
   }
 
   function saveCurrentMeetingInBrowser() {
@@ -928,27 +1011,97 @@ export default function Home() {
       ...(archive.transcriptAnalysis?.actionPlan.length ? [] : ["Noch keine Maßnahmen gespeichert."]),
       "",
       "## Follow-up",
-      archive.transcriptAnalysis?.followUpEmailDraft || "Noch kein Follow-up-Entwurf vorhanden."
+      archive.transcriptAnalysis?.followUpEmailDraft || "Noch kein Follow-up-Entwurf vorhanden.",
+      "",
+      "## Qualitätsprüfung",
+      `Belastbarkeit: ${archive.qualityReview?.level ?? "nicht bewertet"} (${archive.qualityReview?.score ?? 0}/100)`,
+      ...(archive.qualityReview?.reliabilityNotes ?? ["Noch keine Qualitätsnotizen vorhanden."]).map((item) => `- ${item}`)
     ];
 
     return lines.join("\n");
   }
 
   function downloadArchiveMarkdown(archive: MeetingArchive) {
-    const blob = new Blob([archiveToMarkdown(archive)], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = createArchiveFileName(archive.metadata.title).replace(".meeting.json", ".md");
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    setArchiveStatus(`Markdown-Export vorbereitet: ${link.download}.`);
+    const fileName = createArchiveFileName(archive.metadata.title).replace(".meeting.json", ".md");
+    downloadTextFile(archiveToMarkdown(archive), fileName, "text/markdown");
+    setArchiveStatus(`Markdown-Export vorbereitet: ${fileName}.`);
   }
 
   function downloadCurrentMeetingMarkdown() {
     downloadArchiveMarkdown(createCurrentMeetingArchive());
+  }
+
+  function archiveToProfessionalExport(archive: MeetingArchive, kind: ExportKind) {
+    const title = archive.metadata.title;
+    const analysis = archive.transcriptAnalysis;
+    const actions = analysis?.actionPlan ?? [];
+    const header = [
+      `# ${kind === "management" ? "Management-Protokoll" : kind === "actions" ? "Maßnahmenliste" : kind === "decision" ? "Entscheidungsnotiz" : "Projektaktenbericht"}: ${title}`,
+      "",
+      `Datum: ${archive.metadata.date}`,
+      `Status: ${archive.metadata.status}`,
+      `Ziel: ${archive.metadata.goal || "nicht erfasst"}`,
+      `Gewünschtes Ergebnis: ${archive.metadata.desiredOutcome || "nicht erfasst"}`,
+      `Qualität: ${archive.qualityReview?.level ?? "nicht bewertet"} (${archive.qualityReview?.score ?? 0}/100)`,
+      ""
+    ];
+
+    if (kind === "management") {
+      return [
+        ...header,
+        "## Management Summary",
+        analysis?.managementSummary ?? "Noch keine Management Summary vorhanden.",
+        "",
+        "## Entscheidungen",
+        ...(analysis?.decisions.length ? analysis.decisions.map((item) => `- ${item}`) : ["- Noch keine Entscheidungen dokumentiert."]),
+        "",
+        "## Offene Risiken",
+        ...(analysis?.openRisks.length ? analysis.openRisks.map((item) => `- ${item}`) : ["- Keine offenen Risiken dokumentiert."]),
+        "",
+        "## Nächste Schritte",
+        ...(archive.qualityReview?.recommendedNextChecks ?? ["Fachliche Prüfung durchführen."]).map((item) => `- ${item}`)
+      ].join("\n");
+    }
+
+    if (kind === "actions") {
+      return [
+        ...header,
+        "## Maßnahmenregister",
+        ...(actions.length
+          ? actions.map((item, index) => `${index + 1}. ${item.task}\n   Owner: ${item.owner}\n   Frist: ${item.due}\n   Priorität: ${item.priority}\n   Risiko: ${item.risk}`)
+          : ["Noch keine Maßnahmen vorhanden."]),
+        "",
+        "## Offene Punkte",
+        ...(analysis?.openPoints.length ? analysis.openPoints.map((item) => `- ${item}`) : ["- Keine offenen Punkte dokumentiert."])
+      ].join("\n");
+    }
+
+    if (kind === "decision") {
+      return [
+        ...header,
+        "## Entscheidungen",
+        ...(analysis?.decisions.length ? analysis.decisions.map((item) => `- ${item}`) : ["- Noch keine Entscheidungen dokumentiert."]),
+        "",
+        "## Vertagte Entscheidungen",
+        ...(analysis?.deferredDecisions.length ? analysis.deferredDecisions.map((item) => `- ${item}`) : ["- Keine vertagten Entscheidungen dokumentiert."]),
+        "",
+        "## Entscheidungsgrundlage",
+        ...(analysis?.decisionBasis.length ? analysis.decisionBasis.map((item) => `- ${item}`) : ["- Keine Entscheidungsgrundlage dokumentiert."]),
+        "",
+        "## Devil's Advocate",
+        archive.decisionChallenge?.risk ? `Risikobewertung: ${archive.decisionChallenge.risk.level} - ${archive.decisionChallenge.risk.rationale}` : "Noch keine separate Entscheidungsprüfung vorhanden."
+      ].join("\n");
+    }
+
+    return archiveToMarkdown(archive);
+  }
+
+  function downloadProfessionalExport(kind: ExportKind) {
+    const archive = createCurrentMeetingArchive();
+    const suffix = kind === "management" ? "management-protokoll" : kind === "actions" ? "massnahmenliste" : kind === "decision" ? "entscheidungsnotiz" : "projektaktenbericht";
+    const fileName = createArchiveFileName(archive.metadata.title).replace(".meeting.json", `-${suffix}.md`);
+    downloadTextFile(archiveToProfessionalExport(archive, kind), fileName, "text/markdown");
+    setArchiveStatus(`Export vorbereitet: ${fileName}.`);
   }
 
   function readTextFile(file: File) {
@@ -961,6 +1114,7 @@ export default function Home() {
   }
 
   function applyMeetingArchive(archive: MeetingArchive) {
+    setCurrentArchiveId(archive.id || `meeting-${Date.now()}`);
     setMeetingMetadata({
       title: archive.metadata.title || "Geladene Meeting-Akte",
       date: archive.metadata.date || new Date().toISOString().slice(0, 10),
@@ -1156,6 +1310,7 @@ export default function Home() {
   }
 
   function startNewMeeting() {
+    setCurrentArchiveId(`meeting-${Date.now()}`);
     setMeetingMetadata(createInitialMeetingMetadata());
     setPreparationInput(initialPreparation);
     setPreparation(null);
@@ -1287,6 +1442,23 @@ export default function Home() {
             <p>{lastAiResultMeta.message}</p>
           </section>
         )}
+
+        <section className="quality-panel" aria-label="Qualitätsprüfung der aktuellen Meeting-Akte">
+          <div>
+            <span className="quality-panel__eyebrow">Aktuelle Meeting-Akte</span>
+            <strong>{currentMeetingTitle}</strong>
+            <p>ID: {currentArchiveId} · Status: {meetingMetadata.status}</p>
+          </div>
+          <div className={`quality-score quality-score--${qualityReview.level.toLowerCase()}`}>
+            <span>{qualityReview.score}/100</span>
+            <strong>Belastbarkeit {qualityReview.level}</strong>
+          </div>
+          <div className="quality-panel__details">
+            <span>{qualityReview.missingInputs.length ? `${qualityReview.missingInputs.length} offene Eingaben` : "Eingaben vollständig"}</span>
+            <span>{transcript?.actionPlan.length ?? 0} Maßnahmen</span>
+            <span>{transcript?.decisions.length ?? 0} Entscheidungen</span>
+          </div>
+        </section>
 
         {activeArea === "dashboard" && (
           <section className="section">
@@ -1447,6 +1619,15 @@ export default function Home() {
                   <button className="secondary-button" onClick={downloadCurrentMeetingMarkdown} type="button">
                     <FileText size={17} /> Als Markdown exportieren
                   </button>
+                  <button className="secondary-button" onClick={() => downloadProfessionalExport("management")} type="button">
+                    <FileText size={17} /> Management-Protokoll
+                  </button>
+                  <button className="secondary-button" onClick={() => downloadProfessionalExport("actions")} type="button">
+                    <ListChecks size={17} /> Maßnahmenliste
+                  </button>
+                  <button className="secondary-button" onClick={() => downloadProfessionalExport("decision")} type="button">
+                    <ShieldQuestion size={17} /> Entscheidungsnotiz
+                  </button>
                 </div>
               </article>
 
@@ -1483,6 +1664,19 @@ export default function Home() {
             </div>
 
             <p className="result-note">{archiveStatus}</p>
+            <div className="analysis-lane">
+              <h2>Qualitätsprüfung der aktuellen Akte</h2>
+              <div className="result-grid">
+                <section className="result-block">
+                  <h3>Belastbarkeit</h3>
+                  <RiskBadge level={qualityReview.level === "Hoch" ? "Grün" : qualityReview.level === "Mittel" ? "Gelb" : "Rot"} />
+                  <p>{qualityReview.score}/100 Punkte. Diese Bewertung entsteht lokal aus Vollständigkeit, Analysegrad und Quellenstatus.</p>
+                </section>
+                <ResultSection title="Fehlende Eingaben" items={qualityReview.missingInputs.length ? qualityReview.missingInputs : ["Keine zentralen Lücken erkannt."]} />
+                <ResultSection title="Annahmen" items={qualityReview.assumptions} />
+                <ResultSection title="Nächste Prüfungen" items={qualityReview.recommendedNextChecks} />
+              </div>
+            </div>
             {savedArchives.length > 0 && (
               <section className="result-block result-block--wide">
                 <h3>Lokale Meeting-Übersicht</h3>
@@ -1491,7 +1685,7 @@ export default function Home() {
                     <article className="archive-row" key={archive.id}>
                       <div>
                         <strong>{archive.metadata.title}</strong>
-                        <span>{archive.metadata.date} · Status: {archive.metadata.status}</span>
+                        <span>{archive.metadata.date} · Status: {archive.metadata.status} · Qualität: {archive.qualityReview?.level ?? "offen"}</span>
                       </div>
                       <div>
                         <span>{archive.transcription.rawText ? "Transkript vorhanden" : "ohne Transkript"}</span>
@@ -1910,6 +2104,7 @@ export default function Home() {
                   <p><strong>Qualität:</strong> {transcription?.confidence ?? "noch nicht erzeugt"}</p>
                   <p><strong>Anbieter:</strong> {transcription?.provider ?? (activeAiConfig.mode === "api" ? (activeAiConfig.provider === "openai" ? "OpenAI vorbereitet" : "Anthropic vorbereitet") : "Mock")}</p>
                   <p><strong>Modell:</strong> {transcription?.model ?? (activeAiConfig.mode === "api" && activeAiConfig.provider === "openai" ? "gpt-4o-mini-transcribe" : "noch nicht erzeugt")}</p>
+                  <p><strong>Upload-Limit:</strong> OpenAI-Audio aktuell bis {OPENAI_AUDIO_UPLOAD_LIMIT_MB} MB je Datei; längere Meetings bitte in Abschnitte aufnehmen.</p>
                   <p><strong>Hinweis:</strong> {transcription?.note ?? "OpenAI kann im API-Modus echte Transkripte erzeugen. Anthropic ist für Audio-Transkription noch nicht angebunden."}</p>
                 </section>
                 <section className="result-block result-block--wide">
@@ -2218,6 +2413,23 @@ export default function Home() {
                 </div>
                 <div className="analysis-lane">
                   <h2>Maßnahmenplan</h2>
+                  <div className="decision-action-summary">
+                    <div>
+                      <strong>{transcript.decisions.length}</strong>
+                      <span>Entscheidungen erkannt</span>
+                    </div>
+                    <div>
+                      <strong>{transcript.deferredDecisions.length}</strong>
+                      <span>vertagte Entscheidungen</span>
+                    </div>
+                    <div>
+                      <strong>{transcript.actionPlan.length}</strong>
+                      <span>Maßnahmen abgeleitet</span>
+                    </div>
+                    <button className="secondary-button" onClick={() => downloadProfessionalExport("actions")} type="button">
+                      <Download size={17} /> Maßnahmenliste exportieren
+                    </button>
+                  </div>
                   <div className="action-plan-list">
                     {transcript.actionPlan.map((item) => (
                       <article className="action-plan-item" key={`${item.task}-${item.owner}`}>

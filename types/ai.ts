@@ -104,6 +104,15 @@ export type TranscriptionResult = {
   note: string;
 };
 
+export type AiQualityReview = {
+  level: "Hoch" | "Mittel" | "Niedrig";
+  score: number;
+  missingInputs: string[];
+  assumptions: string[];
+  reliabilityNotes: string[];
+  recommendedNextChecks: string[];
+};
+
 export type StakeholderAnalysisResult = {
   inferredInterests: string[];
   triggers: string[];
@@ -158,6 +167,7 @@ export type MeetingArchive = {
   simulation: MeetingScenario[] | null;
   stakeholderAnalysis: StakeholderAnalysisResult | null;
   patternAnalysis: MeetingPatternsResult | null;
+  qualityReview?: AiQualityReview;
 };
 
 export type MultiMeetingArchiveAnalysisResult = {

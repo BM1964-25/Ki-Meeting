@@ -304,6 +304,93 @@ h3 {
   color: #75551b;
 }
 
+.quality-panel {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(220px, auto);
+  margin-bottom: 24px;
+  padding: 16px;
+}
+
+.quality-panel__eyebrow {
+  color: var(--primary);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.quality-panel strong,
+.quality-panel p {
+  display: block;
+  margin: 0;
+}
+
+.quality-panel p {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin-top: 4px;
+}
+
+.quality-score {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 150px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.quality-score span {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 900;
+}
+
+.quality-score strong {
+  font-size: 0.78rem;
+}
+
+.quality-score--hoch {
+  background: #e7f6ee;
+  border-color: #b7dfc8;
+  color: var(--green);
+}
+
+.quality-score--mittel {
+  background: #fff8e8;
+  border-color: #efd391;
+  color: #75551b;
+}
+
+.quality-score--niedrig {
+  background: #fff1f0;
+  border-color: #efc2bd;
+  color: #9f2c22;
+}
+
+.quality-panel__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.quality-panel__details span {
+  background: #f4f8fa;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
 .section {
   display: grid;
   gap: 18px;
@@ -1524,6 +1611,39 @@ h3 {
   gap: 12px;
 }
 
+.decision-action-summary {
+  align-items: center;
+  background: #f7fafc;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  padding: 12px;
+}
+
+.decision-action-summary div {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.decision-action-summary strong,
+.decision-action-summary span {
+  display: block;
+}
+
+.decision-action-summary strong {
+  font-size: 1.25rem;
+}
+
+.decision-action-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .action-plan-item {
   background: #ffffff;
   border: 1px solid var(--line);
@@ -1905,6 +2025,7 @@ h3 {
   .archive-row,
   .protocol-grid,
   .measure-row,
+  .decision-action-summary,
   .workflow-hero,
   .workflow-steps,
   .agenda-intro,
@@ -1934,8 +2055,14 @@ h3 {
     display: grid;
   }
 
-  .ai-result-banner {
+  .ai-result-banner,
+  .quality-panel {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .quality-panel__details {
+    justify-content: flex-start;
   }
 
   .transcription-workspace__header {
