@@ -570,6 +570,51 @@ h3 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.workflow-intake-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.workflow-intake-panel__header {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.workflow-intake-panel__header h2 {
+  margin-bottom: 8px;
+}
+
+.workflow-intake-panel__header span {
+  background: #f4f8fa;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.workflow-intake-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workflow-intake-grid label:nth-child(n + 4) {
+  align-self: stretch;
+}
+
+.workflow-intake-grid textarea {
+  min-height: 112px;
+}
+
 .workflow-step {
   background: #ffffff;
   border: 1px solid var(--line);
@@ -2687,6 +2732,8 @@ h3 {
   .cross-action-panel__header,
   .cross-action-row,
   .project-dashboard-grid,
+  .workflow-intake-panel__header,
+  .workflow-intake-grid,
   .workflow-assistant-panel__header,
   .workflow-timeline-step,
   .report-hero,

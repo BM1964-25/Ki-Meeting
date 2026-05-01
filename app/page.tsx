@@ -198,6 +198,18 @@ type MeetingMetadataForm = {
   status: MeetingStatus;
 };
 
+type MeetingStartDraft = {
+  title: string;
+  project: string;
+  context: string;
+  goal: string;
+  participants: string;
+  desiredOutcome: string;
+  criticalTopics: string;
+  ownPosition: string;
+  duration: string;
+};
+
 type AiConsentDialog = {
   title: string;
   description: string;
@@ -223,6 +235,18 @@ const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
   goal: "",
   desiredOutcome: "",
   status: "geplant"
+});
+
+const createInitialMeetingStartDraft = (): MeetingStartDraft => ({
+  title: "",
+  project: "",
+  context: "",
+  goal: "",
+  participants: "",
+  desiredOutcome: "",
+  criticalTopics: "",
+  ownPosition: "",
+  duration: "60 Minuten"
 });
 
 const createSilentWaveform = () =>
@@ -378,6 +402,7 @@ export default function Home() {
   const initialAiSettings = useMemo(() => loadAiSettingsFromStorage(), []);
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [meetingMetadata, setMeetingMetadata] = useState<MeetingMetadataForm>(createInitialMeetingMetadata);
+  const [meetingStartDraft, setMeetingStartDraft] = useState<MeetingStartDraft>(createInitialMeetingStartDraft);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
   const [microphoneStatus, setMicrophoneStatus] = useState<"unbekannt" | "angefragt" | "erlaubt" | "blockiert" | "nicht verfügbar">("unbekannt");
@@ -1928,6 +1953,7 @@ export default function Home() {
   function startNewMeeting() {
     setCurrentArchiveId(`meeting-${Date.now()}`);
     setMeetingMetadata(createInitialMeetingMetadata());
+    setMeetingStartDraft(createInitialMeetingStartDraft());
     setPreparationInput(initialPreparation);
     setPreparation(null);
     setAgendaInput(initialAgenda);
@@ -1950,6 +1976,62 @@ export default function Home() {
     setRecordingSeconds(0);
     setRecordingState("idle");
     setActiveArea("agenda");
+  }
+
+  function applyMeetingStartDraft(targetArea: AreaId = "agenda") {
+    const title = meetingStartDraft.title.trim() || "Neue Meeting-Akte";
+    const project = meetingStartDraft.project.trim();
+    const context = meetingStartDraft.context.trim();
+    const goal = meetingStartDraft.goal.trim();
+    const participants = meetingStartDraft.participants.trim();
+    const desiredOutcome = meetingStartDraft.desiredOutcome.trim();
+    const criticalTopics = meetingStartDraft.criticalTopics.trim();
+    const ownPosition = meetingStartDraft.ownPosition.trim();
+    const duration = meetingStartDraft.duration.trim() || "60 Minuten";
+    const agendaText = [
+      context ? `Anlass: ${context}` : "",
+      goal ? `Ziel: ${goal}` : "",
+      desiredOutcome ? `Gewünschtes Ergebnis: ${desiredOutcome}` : "",
+      criticalTopics ? `Kritische Themen: ${criticalTopics}` : "",
+      "Vorschlag: Einstieg, Zielklärung, kritische Punkte, Entscheidungsbedarf, Maßnahmen und Abschluss."
+    ].filter(Boolean).join("\n");
+
+    setMeetingMetadata((currentMetadata) => ({
+      ...currentMetadata,
+      title,
+      project,
+      participants,
+      goal,
+      desiredOutcome,
+      status: "geplant"
+    }));
+    setAgendaInput((currentInput) => ({
+      ...currentInput,
+      title,
+      meetingGoal: goal,
+      participants,
+      duration,
+      desiredOutcome,
+      agendaText,
+      existingAgenda: currentInput.existingAgenda
+    }));
+    setPreparationInput((currentInput) => ({
+      ...currentInput,
+      title,
+      goal,
+      participants,
+      desiredOutcome,
+      criticalTopics,
+      ownPosition
+    }));
+    setSimulationInput({
+      goal,
+      participants,
+      conflicts: criticalTopics
+    });
+    setDecisionText(desiredOutcome || goal);
+    setArchiveStatus("Fragen-Assistent hat die aktuelle Meeting-Akte vorbefüllt. Bitte Agenda und Vorbereitung fachlich prüfen.");
+    setActiveArea(targetArea);
   }
 
   function persistAiSettings() {
@@ -2142,6 +2224,64 @@ export default function Home() {
                 </button>
               </article>
             </div>
+            <form
+              className="workflow-intake-panel"
+              onSubmit={(event) => {
+                event.preventDefault();
+                applyMeetingStartDraft("agenda");
+              }}
+            >
+              <div className="workflow-intake-panel__header">
+                <div>
+                  <h2>Meeting mit Fragen vorbereiten</h2>
+                  <p className="lead">
+                    Beantworte die Kernfragen einmal. Die App befüllt daraus Stammdaten, Agenda,
+                    Vorbereitung, Simulation und Entscheidungsprüfung.
+                  </p>
+                </div>
+                <span>lokal gespeichert erst nach Akten-Speicherung</span>
+              </div>
+              <div className="workflow-intake-grid">
+                <Field label="Meeting-Titel">
+                  <input value={meetingStartDraft.title} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, title: event.target.value })} />
+                </Field>
+                <Field label="Projekt / Mandat">
+                  <input value={meetingStartDraft.project} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, project: event.target.value })} />
+                </Field>
+                <Field label="Dauer">
+                  <input placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, duration: event.target.value })} />
+                </Field>
+                <Field label="Anlass">
+                  <textarea value={meetingStartDraft.context} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, context: event.target.value })} />
+                </Field>
+                <Field label="Ziel">
+                  <textarea value={meetingStartDraft.goal} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, goal: event.target.value })} />
+                </Field>
+                <Field label="Teilnehmer und Rollen">
+                  <textarea value={meetingStartDraft.participants} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, participants: event.target.value })} />
+                </Field>
+                <Field label="Gewünschtes Ergebnis">
+                  <textarea value={meetingStartDraft.desiredOutcome} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, desiredOutcome: event.target.value })} />
+                </Field>
+                <Field label="Kritische Themen / Konflikte">
+                  <textarea value={meetingStartDraft.criticalTopics} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, criticalTopics: event.target.value })} />
+                </Field>
+                <Field label="Eigene Position">
+                  <textarea value={meetingStartDraft.ownPosition} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: event.target.value })} />
+                </Field>
+              </div>
+              <div className="button-row">
+                <button className="primary-button" type="submit">
+                  <ListChecks size={17} /> Akte vorbefüllen und Agenda öffnen
+                </button>
+                <button className="secondary-button" onClick={() => applyMeetingStartDraft("prepare")} type="button">
+                  <ClipboardCheck size={17} /> Vorbereitung öffnen
+                </button>
+                <button className="secondary-button" onClick={() => applyMeetingStartDraft("simulate")} type="button">
+                  <PlayCircle size={17} /> Simulation öffnen
+                </button>
+              </div>
+            </form>
             <section className="workflow-assistant-panel">
               <div className="workflow-assistant-panel__header">
                 <div>
