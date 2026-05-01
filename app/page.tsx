@@ -1901,7 +1901,7 @@ export default function Home() {
     }
     setLoadingAction("simulation");
     try {
-      setSimulation(await generateMeetingSimulation(activeAiConfig));
+      setSimulation(await generateMeetingSimulation(simulationInput, activeAiConfig));
     } finally {
       setLoadingAction(null);
     }

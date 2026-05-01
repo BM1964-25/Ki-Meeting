@@ -241,6 +241,127 @@ function createMockTranscriptionResult(sourceLabel: string, durationLabel: strin
   };
 }
 
+type MeetingKind = "entscheidung" | "eskalation" | "status" | "verhandlung" | "strategie";
+
+type MeetingKindProfile = {
+  label: string;
+  agendaTopics: string[];
+  arguments: string[];
+  objections: string[];
+  criticalQuestions: string[];
+  responseStrategies: string[];
+  decisionWeaknesses: string[];
+  decisionQuestions: string[];
+  riskRationale: string;
+  simulationFocus: {
+    best: string[];
+    worst: string[];
+    likely: string[];
+    closing: string;
+  };
+};
+
+const meetingKindProfiles: Record<MeetingKind, MeetingKindProfile> = {
+  entscheidung: {
+    label: "Entscheidung",
+    agendaTopics: ["Entscheidungsfrage und Optionen", "Bewertungskriterien und Risiken", "Beschluss, Owner und Prüfpunkte"],
+    arguments: ["Entscheidungsoptionen anhand klarer Kriterien vergleichen.", "Konsequenzen von Entscheidung und Nichtentscheidung nebeneinanderstellen."],
+    objections: ["Entscheidungsgrundlage wird als noch nicht belastbar genug bewertet.", "Teilnehmer fordern weitere Alternativen oder Szenarien."],
+    criticalQuestions: ["Welche Option wird heute verbindlich ausgeschlossen?", "Welches Risiko akzeptieren wir ausdrücklich?"],
+    responseStrategies: ["Auf Beschlussreife fokussieren und offene Annahmen als Bedingungen formulieren.", "Am Ende eine explizite Entscheidungsfrage stellen."],
+    decisionWeaknesses: ["Entscheidungskriterien sind nicht priorisiert.", "Die Nichtentscheidung hat keine sichtbaren Konsequenzen."],
+    decisionQuestions: ["Welche Information fehlt wirklich für einen Beschluss?", "Wer ist nach dem Meeting entscheidungs- und umsetzungsverantwortlich?"],
+    riskRationale: "Beschlussfähig, wenn Entscheidungskriterien, Annahmen und Verantwortlichkeiten ausdrücklich dokumentiert werden.",
+    simulationFocus: {
+      best: ["Die Runde akzeptiert die Entscheidungskriterien.", "Optionen werden zügig gegeneinander abgewogen.", "Ein Beschluss mit Bedingungen entsteht."],
+      worst: ["Die Diskussion bleibt in Optionen hängen.", "Teilnehmer fordern weitere Analysen.", "Der Beschluss wird ohne Owner vertagt."],
+      likely: ["Grundsätzliche Zustimmung entsteht, aber mit Bedingungen.", "Einzelne Annahmen müssen nachgeschärft werden."],
+      closing: "Wir halten fest: Option, Bedingung, Owner und nächster Prüftermin sind entschieden."
+    }
+  },
+  eskalation: {
+    label: "Eskalation",
+    agendaTopics: ["Sachlage und Blockade", "Konfliktlinien und Entscheidungsbedarf", "Lösungsoption und Eskalationspfad"],
+    arguments: ["Blockade sachlich beschreiben, ohne Schuldzuweisung zu starten.", "Eskalation als Entscheidungshilfe, nicht als Vorwurf rahmen."],
+    objections: ["Beteiligte verteidigen ihre Position statt die Lösung zu suchen.", "Die Eskalation wird als politischer Angriff interpretiert."],
+    criticalQuestions: ["Welche konkrete Blockade muss heute gelöst werden?", "Welche Entscheidung oder Ressource beendet den Konflikt?"],
+    responseStrategies: ["Fakten, Auswirkungen und benötigte Entscheidung sauber trennen.", "Konfliktpunkte in lösbare Entscheidungsfragen übersetzen."],
+    decisionWeaknesses: ["Konfliktursache und Symptombeschreibung werden vermischt.", "Eskalationspfad und Entscheidungskompetenz bleiben unklar."],
+    decisionQuestions: ["Wer kann die Blockade tatsächlich auflösen?", "Was passiert, wenn heute keine Eskalationsentscheidung fällt?"],
+    riskRationale: "Erhöhtes Risiko, wenn Konfliktlinien nicht neutralisiert und Entscheidungskompetenzen nicht geklärt werden.",
+    simulationFocus: {
+      best: ["Die Beteiligten akzeptieren die Sachlage.", "Blockade wird als gemeinsames Problem behandelt.", "Ein verbindlicher Lösungsauftrag entsteht."],
+      worst: ["Die Diskussion wird persönlich.", "Verantwortung wird verschoben.", "Die Eskalation verschärft die Blockade."],
+      likely: ["Ein Teil der Blockade wird gelöst, ein Teil braucht Management-Entscheidung.", "Ein Follow-up mit klarer Eskalationslogik entsteht."],
+      closing: "Wir trennen fest: Ursache, Entscheidung, Owner und Eskalationspunkt."
+    }
+  },
+  status: {
+    label: "Status",
+    agendaTopics: ["Fortschritt und Planabweichungen", "Risiken und offene Punkte", "Maßnahmen, Owner und nächste Meilensteine"],
+    arguments: ["Status konsequent nach Ampellogik und Auswirkungen strukturieren.", "Abweichungen nicht beschönigen, sondern mit Gegenmaßnahmen verbinden."],
+    objections: ["Status wirkt zu operativ und nicht entscheidungsrelevant.", "Risiken werden als bekannt, aber ungelöst wahrgenommen."],
+    criticalQuestions: ["Welche Abweichung braucht Management-Aufmerksamkeit?", "Welche Maßnahme verhindert die nächste Eskalation?"],
+    responseStrategies: ["Abweichung, Ursache, Auswirkung und Maßnahme in einem Satz verbinden.", "Nur Punkte eskalieren, die Entscheidung oder Ressourcen benötigen."],
+    decisionWeaknesses: ["Statuskennzahlen sind nicht mit Maßnahmen verbunden.", "Offene Punkte haben keine klaren Owner."],
+    decisionQuestions: ["Welche rote Ampel wird heute entschieden?", "Welche Maßnahme ist bis zum nächsten Statusbericht nachweisbar?"],
+    riskRationale: "Mittleres Risiko, wenn Status und Maßnahmen nicht messbar verbunden sind.",
+    simulationFocus: {
+      best: ["Status wird schnell verstanden.", "Risiken werden priorisiert.", "Maßnahmen und Owner werden bestätigt."],
+      worst: ["Statusbericht wird zur Detaildiskussion.", "Risiken werden relativiert.", "Keine Maßnahme wird verbindlich."],
+      likely: ["Einige Abweichungen werden akzeptiert.", "Ein bis zwei Punkte brauchen Nacharbeit.", "Maßnahmen werden angepasst."],
+      closing: "Wir halten Ampel, Abweichung, Maßnahme, Owner und Termin fest."
+    }
+  },
+  verhandlung: {
+    label: "Verhandlung",
+    agendaTopics: ["Interessen und Ziele", "Optionen, Konzessionen und rote Linien", "Abschlusskorridor und nächste Schritte"],
+    arguments: ["Eigene Interessen von Positionen trennen.", "Zugeständnisse nur gegen konkrete Gegenleistung anbieten."],
+    objections: ["Gegenseite testet rote Linien oder verschiebt Bedingungen.", "Preis, Risiko oder Timing werden als Druckmittel genutzt."],
+    criticalQuestions: ["Was ist unsere rote Linie?", "Welche Konzession ist nur gegen welche Gegenleistung sinnvoll?"],
+    responseStrategies: ["Fragen nach Interessen stellen, bevor Angebote gemacht werden.", "Konzessionen konditional formulieren."],
+    decisionWeaknesses: ["Verhandlungsgrenzen sind nicht operationalisiert.", "BATNA und Ausstiegsszenario sind nicht sichtbar."],
+    decisionQuestions: ["Ab welchem Punkt ist kein Abschluss besser als dieser Abschluss?", "Welche Gegenleistung macht ein Zugeständnis vertretbar?"],
+    riskRationale: "Verhandlungsrisiko steigt deutlich, wenn rote Linien, Tauschlogik und Ausstieg nicht vorbereitet sind.",
+    simulationFocus: {
+      best: ["Interessen werden offen benannt.", "Konzessionen werden fair getauscht.", "Ein Abschlusskorridor entsteht."],
+      worst: ["Gegenseite fordert einseitige Zugeständnisse.", "Rote Linien werden unklar.", "Abschlussdruck steigt."],
+      likely: ["Ein bedingter Kompromiss entsteht.", "Einige Punkte bleiben für Folgeklärung offen."],
+      closing: "Wir halten fest: Angebot, Gegenleistung, Grenze und nächster Verhandlungspunkt."
+    }
+  },
+  strategie: {
+    label: "Strategie",
+    agendaTopics: ["Zielbild und strategische Optionen", "Trade-offs und Konsequenzen", "Prioritäten und nächste Entscheidungsstufe"],
+    arguments: ["Strategische Optionen über Wirkung, Machbarkeit und Risiko vergleichen.", "Trade-offs offen benennen statt Konsensformeln zu suchen."],
+    objections: ["Strategie bleibt zu abstrakt und ohne Umsetzungslogik.", "Kurzfristige operative Zwänge dominieren die Diskussion."],
+    criticalQuestions: ["Welche Option passt am stärksten zum Zielbild?", "Welchen Trade-off akzeptieren wir bewusst?"],
+    responseStrategies: ["Diskussion auf Zielbild, Optionen und Konsequenzen zurückführen.", "Entscheidungshypothesen statt fertiger Gewissheiten formulieren."],
+    decisionWeaknesses: ["Strategische Prioritäten sind nicht hart genug gegeneinander abgegrenzt.", "Umsetzungsfähigkeit und Timing bleiben zu grob."],
+    decisionQuestions: ["Welche Option schafft den größten strategischen Vorteil?", "Welche Konsequenz wird bisher nicht offen ausgesprochen?"],
+    riskRationale: "Strategisch relevant, aber nur belastbar, wenn Prioritäten, Trade-offs und Umsetzungsannahmen transparent sind.",
+    simulationFocus: {
+      best: ["Zielbild wird geteilt.", "Optionen werden entlang klarer Kriterien bewertet.", "Eine strategische Priorität entsteht."],
+      worst: ["Diskussion bleibt abstrakt.", "Operative Details verdrängen Strategie.", "Keine Priorität wird gesetzt."],
+      likely: ["Ein Zielbild entsteht, aber Optionen brauchen Nachschärfung.", "Ein Folgeentscheid wird vorbereitet."],
+      closing: "Wir halten Zielbild, bevorzugte Option, Trade-off und nächsten Entscheidungspunkt fest."
+    }
+  }
+};
+
+function detectMeetingKindFromText(text: string): MeetingKind {
+  const normalized = text.toLowerCase();
+  if (normalized.includes("meeting-typ: eskalation") || normalized.includes("eskalation")) return "eskalation";
+  if (normalized.includes("meeting-typ: status") || normalized.includes("status")) return "status";
+  if (normalized.includes("meeting-typ: verhandlung") || normalized.includes("verhandlung")) return "verhandlung";
+  if (normalized.includes("meeting-typ: strategie") || normalized.includes("strategie")) return "strategie";
+  return "entscheidung";
+}
+
+function detectMeetingKind(input: unknown): MeetingKind {
+  return detectMeetingKindFromText(JSON.stringify(input ?? {}));
+}
+
 async function transcribeWithOpenAi(audioBlob: Blob, sourceLabel: string, durationLabel: string, apiKey: string): Promise<TranscriptionResult> {
   if (audioBlob.size > MAX_TRANSCRIPTION_UPLOAD_BYTES) {
     throw new Error("Die Audiodatei ist größer als 25 MB. Bitte kürzere Abschnitte aufnehmen oder die Datei komprimieren.");
@@ -282,23 +403,28 @@ export async function generateMeetingPreparation(
   input: MeetingPreparationInput,
   config?: AiServiceConfig
 ): Promise<MeetingPreparationResult> {
+  const profile = meetingKindProfiles[detectMeetingKind(input)];
   const mockResult: MeetingPreparationResult = {
     arguments: [
+      ...profile.arguments,
       `Das Meeting-Ziel "${input.goal || "Ziel klären"}" sollte konsequent mit dem gewünschten Ergebnis verknüpft werden.`,
       "Nutzen, Risiko und Entscheidungsbedarf früh trennen, damit die Diskussion nicht in Detailfragen abgleitet.",
       `Die eigene Position (${input.ownPosition || "noch zu schärfen"}) als belastbare Empfehlung, nicht als Meinung formulieren.`
     ],
     objections: [
+      ...profile.objections,
       "Budget- oder Ressourcenbindung könnte als zu früh kritisiert werden.",
       "Teilnehmer könnten fehlende Datenbasis oder unklare Verantwortlichkeiten ansprechen.",
       "Kritische Themen könnten auf spätere Runden verschoben werden."
     ],
     criticalQuestions: [
+      ...profile.criticalQuestions,
       "Welche Entscheidung muss am Ende wirklich getroffen sein?",
       "Welche Annahme würde die Empfehlung sofort kippen?",
       "Wer trägt das Risiko, wenn keine Entscheidung fällt?"
     ],
     responseStrategies: [
+      ...profile.responseStrategies,
       "Einwand anerkennen, Entscheidungskriterium benennen, konkrete nächste Prüfung anbieten.",
       "Bei Widerstand zwischen Sachrisiko, Interessenkonflikt und Timing-Problem unterscheiden.",
       "Am Ende eine klare Commit-Frage stellen: Zustimmung, Bedenken oder definierter Nacharbeitsauftrag."
@@ -313,11 +439,13 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
   const goal = input.meetingGoal || "Entscheidungslage klären und nächste Schritte verbindlich festlegen";
   const duration = input.duration || "60 Minuten";
   const desiredOutcome = input.desiredOutcome || "klare Entscheidung oder belastbarer Follow-up-Auftrag";
+  const profile = meetingKindProfiles[detectMeetingKind(input)];
+  const agendaTopics = profile.agendaTopics;
 
   const mockResult: AgendaResult = {
     refinedAgenda: [
       {
-        topic: "Zielbild und Entscheidungsfrage schärfen",
+        topic: agendaTopics[0],
         goal: `Gemeinsames Verständnis herstellen: ${goal}.`,
         owner: "Meeting-Owner",
         timeBudget: "10 Min.",
@@ -331,14 +459,14 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
         expectedDecision: "Offene Annahmen sind priorisiert und mit Owner versehen."
       },
       {
-        topic: "Risiken, Einwände und Alternativen",
+        topic: agendaTopics[1],
         goal: "Kritische Punkte früh behandeln, bevor die Runde in Detaildiskussionen abgleitet.",
         owner: "Projektleitung",
         timeBudget: "15 Min.",
         expectedDecision: "Akzeptierte Risiken und noch zu reduzierende Risiken sind getrennt."
       },
       {
-        topic: "Entscheidung, Maßnahmen und Follow-up",
+        topic: agendaTopics[2],
         goal: `Das gewünschte Ergebnis absichern: ${desiredOutcome}.`,
         owner: "Entscheiderkreis",
         timeBudget: "15 Min.",
@@ -353,24 +481,27 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
       }
     ],
     qualityChecks: [
+      `Meeting-Typ ${profile.label}: ${profile.agendaTopics.join(" | ")}.`,
       `Die Agenda ist für ${duration} realistisch, wenn die Entscheidungsfrage zu Beginn klar eingegrenzt wird.`,
       "Jeder Agenda-Punkt sollte mit einem konkreten Ergebnis enden, nicht nur mit Diskussion.",
       "Kritische Risiken sollten vor der Entscheidung behandelt werden, nicht erst im Abschluss.",
       "Teilnehmerrollen und Entscheidungsrechte sollten vor Versand der Agenda sichtbar gemacht werden."
     ],
     preparationQuestions: [
+      ...profile.criticalQuestions,
       "Welche Entscheidung muss am Ende ausdrücklich getroffen oder vertagt werden?",
       "Welche Information würde die Empfehlung noch verändern?",
       "Wer könnte die Agenda als zu früh, zu eng oder zu offen kritisieren?",
       "Welche Einwände sollten aktiv eingeladen werden, damit sie später nicht verdeckt blockieren?"
     ],
     riskSignals: [
+      profile.riskRationale,
       "Agenda-Punkte ohne Owner führen wahrscheinlich zu unverbindlicher Diskussion.",
       "Wenn Budget, Ressourcen oder Prioritäten erst am Ende auftauchen, steigt das Vertagungsrisiko.",
       "Eine bestehende Agenda ohne Entscheidungsfrage kann später nur schwer gegen Ergebnisse abgeglichen werden."
     ],
     sendableAgendaDraft:
-      `Betreff: Agenda ${title}\n\nHallo zusammen,\n\nfür unser Meeting schlage ich folgende Agenda vor. Ziel ist: ${goal}. Das gewünschte Ergebnis ist: ${desiredOutcome}.\n\n1. Zielbild und Entscheidungsfrage schärfen\n2. Ausgangslage, Datenbasis und offene Annahmen\n3. Risiken, Einwände und Alternativen\n4. Entscheidung, Maßnahmen und Follow-up\n5. Abschluss und Kommunikationslinie\n\nBitte ergänzt vorab, welche Punkte aus eurer Sicht für die Entscheidung zwingend geklärt werden müssen.\n\nViele Grüße`,
+      `Betreff: Agenda ${title}\n\nHallo zusammen,\n\nfür unser ${profile.label}-Meeting schlage ich folgende Agenda vor. Ziel ist: ${goal}. Das gewünschte Ergebnis ist: ${desiredOutcome}.\n\n1. ${agendaTopics[0]}\n2. Ausgangslage, Datenbasis und offene Annahmen\n3. ${agendaTopics[1]}\n4. ${agendaTopics[2]}\n5. Abschluss und Kommunikationslinie\n\nBitte ergänzt vorab, welche Punkte aus eurer Sicht für das Ergebnis zwingend geklärt werden müssen.\n\nViele Grüße`,
     comparison: {
       covered: [
         "Ziel und Ausgangslage wurden voraussichtlich behandelt, wenn sie im Transkript ausdrücklich erwähnt werden.",
@@ -399,8 +530,10 @@ export async function generateAgendaWorkflow(input: AgendaInput, config?: AiServ
 }
 
 export async function generateDecisionChallenge(decision: string, config?: AiServiceConfig): Promise<DecisionChallengeResult> {
+  const profile = meetingKindProfiles[detectMeetingKind(decision)];
   const mockResult: DecisionChallengeResult = {
     weaknesses: [
+      ...profile.decisionWeaknesses,
       "Die zugrunde liegenden Annahmen sind noch nicht priorisiert.",
       "Es fehlt ein klarer Abbruchpunkt für den Fall schlechter Zwischenindikatoren.",
       "Stakeholder mit Vetomacht sind möglicherweise zu spät eingebunden.",
@@ -413,6 +546,7 @@ export async function generateDecisionChallenge(decision: string, config?: AiSer
       "Erfolgskriterien sind noch nicht messbar genug formuliert."
     ],
     uncomfortableQuestions: [
+      ...profile.decisionQuestions,
       `Was wäre der ehrlichste Grund, die Entscheidung "${decision || "diese Entscheidung"}" heute nicht zu treffen?`,
       "Welche Information würde das Management später als Warnsignal interpretieren?",
       "Wer profitiert, wenn die Entscheidung unklar bleibt?",
@@ -439,26 +573,27 @@ export async function generateDecisionChallenge(decision: string, config?: AiSer
     },
     risk: {
       level: "Gelb",
-      rationale: "Strategisch plausibel, aber mit relevanten Umsetzungs- und Annahmerisiken. Vor Freigabe sollten Trigger, Kostenrahmen und Entscheidungslogik geschärft werden."
+      rationale: profile.riskRationale
     }
   };
 
   return routeAiRequest(config, mockResult, "Entscheidung als Devil's Advocate prüfen", { decision });
 }
 
-export async function generateMeetingSimulation(config?: AiServiceConfig): Promise<MeetingScenario[]> {
+export async function generateMeetingSimulation(input: { goal?: string; participants?: string; conflicts?: string } = {}, config?: AiServiceConfig): Promise<MeetingScenario[]> {
+  const profile = meetingKindProfiles[detectMeetingKind(input)];
   const mockResult: MeetingScenario[] = [
     {
       name: "Best Case",
-      likelyFlow: ["Ziel wird akzeptiert.", "Einwände bleiben sachlich.", "Es entsteht ein klares Commitment."],
+      likelyFlow: profile.simulationFocus.best,
       participantStatements: ["Das ist nachvollziehbar.", "Welche nächsten Schritte brauchen wir?", "Ich kann den Teil übernehmen."],
       optimalResponses: ["Danke, ich schlage drei konkrete Entscheidungspunkte vor.", "Lassen Sie uns Verantwortung und Termin direkt festhalten."],
       turningPoints: ["Frühe Zustimmung eines Schlüssel-Stakeholders.", "Gemeinsames Verständnis der Risiken."],
-      closingStatement: "Wir halten fest: Entscheidung, Verantwortliche und nächster Prüfpunkt sind vereinbart."
+      closingStatement: profile.simulationFocus.closing
     },
     {
       name: "Worst Case",
-      likelyFlow: ["Einflussreiche Teilnehmer stellen Grundannahmen infrage.", "Die Diskussion springt zwischen Details.", "Eine Entscheidung wird vertagt."],
+      likelyFlow: profile.simulationFocus.worst,
       participantStatements: ["Das ist mir zu unsicher.", "Wir haben dafür keine Kapazität.", "Das sollten wir später klären."],
       optimalResponses: ["Welches Kriterium müsste erfüllt sein, damit Sie zustimmen können?", "Ich trenne kurz Risiko, Ressource und Entscheidungsbedarf."],
       turningPoints: ["Ein pauschaler Einwand bleibt unwidersprochen.", "Niemand übernimmt die offene Risikoannahme."],
@@ -466,7 +601,7 @@ export async function generateMeetingSimulation(config?: AiServiceConfig): Promi
     },
     {
       name: "Most Likely",
-      likelyFlow: ["Grundsätzliche Zustimmung mit Bedenken.", "Einige Themen werden vertagt.", "Es entsteht ein bedingtes Commitment."],
+      likelyFlow: profile.simulationFocus.likely,
       participantStatements: ["Ich sehe den Nutzen, aber die Umsetzung ist kritisch.", "Wir brauchen mehr Sicherheit bei Kosten und Timing."],
       optimalResponses: ["Ich nehme die Bedingung auf und mache sie messbar.", "Die Entscheidung kann als Stufenfreigabe formuliert werden."],
       turningPoints: ["Bedenken werden in Bedingungen übersetzt.", "Ein klares Follow-up verhindert diffuse Vertagung."],
@@ -474,7 +609,7 @@ export async function generateMeetingSimulation(config?: AiServiceConfig): Promi
     }
   ];
 
-  return routeAiRequest(config, mockResult, "Meeting-Szenarien simulieren", {});
+  return routeAiRequest(config, mockResult, "Meeting-Szenarien simulieren", input);
 }
 
 export async function analyzeTranscript(transcript: string, config?: AiServiceConfig): Promise<TranscriptAnalysisResult> {
