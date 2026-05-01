@@ -302,6 +302,10 @@ export default function Home() {
     }
   }
 
+  function reloadPage() {
+    window.location.reload();
+  }
+
   function pauseRecording() {
     if (recorder?.state === "recording") {
       recorder.pause();
@@ -581,7 +585,28 @@ export default function Home() {
                     <li className={recordingState === "ready" ? "recording-steps__done" : ""}>Stopp drücken. Danach liegt die Aufnahme temporär im Browser vor.</li>
                     <li className={audioUrl ? "recording-steps__done" : ""}>Mit Download dauerhaft als Datei speichern oder direkt transkribieren.</li>
                   </ol>
-                  {recordingError && <p className="recording-error">{recordingError}</p>}
+                  {recordingError && (
+                    <div className="permission-guide">
+                      <p className="recording-error">{recordingError}</p>
+                      <div className="permission-actions">
+                        <button className="primary-button" onClick={startRecording} type="button">
+                          <Mic size={17} /> Mikrofon erneut freigeben
+                        </button>
+                        <button className="secondary-button" onClick={reloadPage} type="button">
+                          Seite neu laden
+                        </button>
+                      </div>
+                      <div className="permission-steps">
+                        <h3>Mikrofon wieder freigeben</h3>
+                        <ol>
+                          <li>In der Browser-Adresszeile bei `127.0.0.1` das Schloss- oder Einstellungs-Symbol öffnen.</li>
+                          <li>Für diese Seite **Mikrofon erlauben** auswählen.</li>
+                          <li>Falls macOS blockiert: Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon öffnen und den verwendeten Browser aktivieren.</li>
+                          <li>Danach die Seite neu laden und erneut auf **Start** klicken.</li>
+                        </ol>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {audioUrl && (
                   <div className="audio-preview">

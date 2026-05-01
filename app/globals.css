@@ -607,6 +607,44 @@ h3 {
   padding: 11px 12px;
 }
 
+.permission-guide {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.permission-guide .recording-error {
+  margin: 0;
+}
+
+.permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.permission-steps {
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.permission-steps h3 {
+  margin-bottom: 8px;
+}
+
+.permission-steps ol {
+  color: #344054;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.permission-steps li {
+  margin: 6px 0;
+}
+
 .audio-preview {
   display: grid;
   gap: 10px;
