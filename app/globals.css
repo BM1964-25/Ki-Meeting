@@ -336,17 +336,19 @@ h3 {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8dde3;
-  border-radius: 24px;
-  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.06);
+  border-radius: 20px;
+  box-shadow: 0 5px 16px rgba(16, 24, 40, 0.045);
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(240px, 1fr) auto minmax(410px, auto) auto;
-  min-height: 62px;
-  padding: 9px 10px;
+  gap: 8px;
+  grid-template-areas: "wave voice timer controls transcribe";
+  grid-template-columns: minmax(260px, 1fr) auto auto max-content max-content;
+  min-height: 50px;
+  padding: 7px 8px;
 }
 
 .recorder-composer--recording {
-  border-color: #f2b8ad;
+  border-color: #d7b8b6;
+  box-shadow: 0 5px 18px rgba(184, 61, 56, 0.08);
 }
 
 .recorder-controls {
@@ -354,8 +356,9 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 999px;
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
+  gap: 3px;
+  grid-area: controls;
+  padding: 3px;
 }
 
 .recorder-control-button {
@@ -364,11 +367,11 @@ h3 {
   border: 0;
   border-radius: 999px;
   display: inline-flex;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 13px;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
 }
 
 .recorder-control-button--start {
@@ -415,11 +418,12 @@ h3 {
 .recorder-transcribe-button {
   background: #15191f;
   color: #ffffff;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  height: 42px;
-  padding: 0 16px;
+  height: 36px;
+  padding: 0 14px;
   width: auto;
+  grid-area: transcribe;
 }
 
 .recorder-transcribe-button:hover:not(:disabled) {
@@ -429,8 +433,9 @@ h3 {
 .recorder-waveform {
   align-items: center;
   display: flex;
-  gap: 3px;
-  min-height: 38px;
+  gap: 2px;
+  grid-area: wave;
+  min-height: 32px;
   overflow: hidden;
   position: relative;
 }
@@ -446,24 +451,60 @@ h3 {
 }
 
 .recorder-waveform__bar {
-  background: #22272f;
+  background: #232933;
   border-radius: 999px;
   display: inline-block;
-  flex: 0 0 3px;
-  min-height: 3px;
+  flex: 0 0 2px;
+  min-height: 2px;
   position: relative;
-  transition: height 110ms linear, opacity 110ms linear;
+  transition: background 120ms ease, height 70ms linear, opacity 120ms linear;
   z-index: 1;
 }
 
 .recorder-waveform__bar--live {
-  background: #171b22;
+  background: #125f75;
+  box-shadow: 0 0 6px rgba(18, 95, 117, 0.12);
+}
+
+.recorder-voice-chip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 5px;
+  grid-area: voice;
+  min-width: 54px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.recorder-voice-chip::before {
+  background: #a8b5c2;
+  border-radius: 999px;
+  content: "";
+  height: 6px;
+  width: 6px;
+}
+
+.recorder-voice-chip--active {
+  border-color: #b7dfc8;
+  color: var(--green);
+}
+
+.recorder-voice-chip--active::before {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(31, 122, 77, 0.12);
 }
 
 .recorder-timer {
   color: #596273;
-  font-size: 1rem;
+  font-size: 0.96rem;
   font-weight: 800;
+  grid-area: timer;
   min-width: 42px;
   text-align: right;
 }
@@ -973,6 +1014,17 @@ h3 {
   .scenario-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .recorder-composer {
+    grid-template-areas:
+      "wave voice timer"
+      "controls controls transcribe";
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .recorder-controls {
+    justify-content: center;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1014,17 +1066,21 @@ h3 {
   .recorder-composer {
     border-radius: 18px;
     gap: 9px;
-    grid-template-columns: 1fr 44px;
+    grid-template-areas:
+      "wave wave"
+      "voice timer"
+      "controls controls"
+      "transcribe transcribe";
+    grid-template-columns: 1fr auto;
     padding: 11px;
   }
 
   .recorder-waveform {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    grid-area: wave;
   }
 
   .recorder-controls {
-    grid-column: 1 / -1;
+    grid-area: controls;
     justify-content: center;
   }
 

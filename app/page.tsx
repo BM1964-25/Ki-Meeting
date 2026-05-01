@@ -92,7 +92,13 @@ const initialPreparation: MeetingPreparationInput = {
   ownPosition: ""
 };
 
-const createSilentWaveform = () => Array.from({ length: 48 }, () => 8);
+const WAVEFORM_BAR_COUNT = 86;
+
+const createSilentWaveform = () =>
+  Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
+    const softPulse = Math.sin(index * 0.72) * 3.5 + Math.cos(index * 0.27) * 2.4;
+    return Math.round(10 + softPulse);
+  });
 
 function detectBrowser(userAgent: string) {
   if (/electron|codex/i.test(userAgent)) {
@@ -309,9 +315,10 @@ export default function Home() {
     const audioContext = new AudioContext();
     const analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
-    const data = new Uint8Array(analyser.fftSize);
 
     analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.58;
+    const data = new Uint8Array(analyser.fftSize);
     source.connect(analyser);
     audioContextRef.current = audioContext;
     analyserRef.current = analyser;
@@ -326,11 +333,27 @@ export default function Home() {
       const level = Math.min(100, Math.round(rms * 220));
 
       setAudioLevel(level);
-      setWaveformBars((previousBars) => {
-        const nextHeight = Math.max(6, Math.min(44, Math.round(level * 0.5) + 6));
-        return [...previousBars.slice(1), nextHeight];
+      const isVoiceActive = level > 8;
+      const chunkSize = Math.max(1, Math.floor(data.length / WAVEFORM_BAR_COUNT));
+      const nextBars = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
+        const start = index * chunkSize;
+        const end = Math.min(data.length, start + chunkSize);
+        let chunkSum = 0;
+
+        for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+          chunkSum += Math.abs(data[sampleIndex] - 128) / 128;
+        }
+
+        const average = chunkSum / Math.max(1, end - start);
+        const liveShape = Math.sin((index + performance.now() / 120) * 0.42) * 3;
+        const idleShape = Math.sin(index * 0.55) * 3.4 + Math.cos(index * 0.2) * 2.2;
+        const rawHeight = isVoiceActive ? 5 + average * 82 + liveShape : 7 + idleShape;
+
+        return Math.max(4, Math.min(42, Math.round(rawHeight)));
       });
-      setIsSpeaking(level > 8);
+
+      setWaveformBars(nextBars);
+      setIsSpeaking(isVoiceActive);
       animationFrameRef.current = requestAnimationFrame(updateMeter);
     };
 
@@ -629,12 +652,15 @@ export default function Home() {
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
                       {waveformBars.map((height, index) => (
                         <span
-                          className={recordingState === "recording" ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
+                          className={recordingState === "recording" && isSpeaking ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
                           key={`${index}-${height}`}
                           style={{ height: `${height}px` }}
                         />
                       ))}
                     </div>
+                    <span className={isSpeaking ? "recorder-voice-chip recorder-voice-chip--active" : "recorder-voice-chip"}>
+                      {isSpeaking ? "Sprache erkannt" : "Still"}
+                    </span>
                     <span className="recorder-timer">{formatTimer(recordingSeconds)}</span>
                     <div className="recorder-controls" aria-label="Aufnahmesteuerung">
                       <button
