@@ -431,6 +431,36 @@ h3 {
   margin: 0;
 }
 
+.meeting-file-card {
+  display: grid;
+  gap: 16px;
+}
+
+.meeting-file-card__header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.meeting-status-pill {
+  background: #e6f3f6;
+  border: 1px solid #c5e3ea;
+  border-radius: 999px;
+  color: var(--primary-dark);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.meeting-file-form {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .recording-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1381,6 +1411,59 @@ h3 {
   margin: 0;
 }
 
+.protocol-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.measure-register {
+  display: grid;
+  gap: 10px;
+}
+
+.measure-row {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+  padding: 14px;
+}
+
+.measure-row strong,
+.measure-row span {
+  display: block;
+}
+
+.measure-row span {
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.measure-row dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.measure-row dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.measure-row dd {
+  font-weight: 800;
+  margin: 0;
+}
+
 .action-plan-list {
   display: grid;
   gap: 12px;
@@ -1721,9 +1804,12 @@ h3 {
   .grid--two,
   .form-grid,
   .result-grid,
+  .meeting-file-form,
   .archive-intro,
   .archive-grid,
   .archive-row,
+  .protocol-grid,
+  .measure-row,
   .workflow-hero,
   .workflow-steps,
   .agenda-intro,
@@ -1784,6 +1870,14 @@ h3 {
 
   .action-plan-item dl {
     grid-template-columns: 1fr;
+  }
+
+  .measure-row dl {
+    grid-template-columns: 1fr;
+  }
+
+  .meeting-file-card__header {
+    display: grid;
   }
 
   .recorder-composer {

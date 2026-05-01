@@ -133,12 +133,31 @@ const AI_SETTINGS_STORAGE_KEY = "meeting-intelligence-ki.ai-settings.v1";
 
 type AiProvider = "anthropic" | "openai";
 type AiMode = "mock" | "api";
+type MeetingStatus = "geplant" | "aufgenommen" | "transkribiert" | "analysiert" | "abgeschlossen";
+
+type MeetingMetadataForm = {
+  title: string;
+  date: string;
+  participants: string;
+  goal: string;
+  desiredOutcome: string;
+  status: MeetingStatus;
+};
 
 type StoredAiSettings = {
   provider: AiProvider;
   mode: AiMode;
   apiKey: string;
 };
+
+const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
+  title: "Neue Meeting-Akte",
+  date: new Date().toISOString().slice(0, 10),
+  participants: "",
+  goal: "",
+  desiredOutcome: "",
+  status: "geplant"
+});
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -253,6 +272,7 @@ function formatTimer(seconds: number) {
 export default function Home() {
   const initialAiSettings = useMemo(() => loadAiSettingsFromStorage(), []);
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
+  const [meetingMetadata, setMeetingMetadata] = useState<MeetingMetadataForm>(createInitialMeetingMetadata);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
   const [microphoneStatus, setMicrophoneStatus] = useState<"unbekannt" | "angefragt" | "erlaubt" | "blockiert" | "nicht verfügbar">("unbekannt");
@@ -338,6 +358,7 @@ export default function Home() {
   );
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
+  const currentMeetingTitle = meetingMetadata.title.trim() || "Neue Meeting-Akte";
   const aiStatusLabel = aiMode === "api" && anthropicConnectionState === "connected"
     ? `${apiProvider === "anthropic" ? "Anthropic" : "OpenAI"} bereit`
     : "Mock-KI aktiv";
@@ -685,7 +706,6 @@ export default function Home() {
   }
 
   function createCurrentMeetingArchive(): MeetingArchive {
-    const title = agendaInput.title || preparationInput.title || "Meeting-Projektakte";
     const hasAnalysis = Boolean(transcript || agenda || preparation || decision || simulation || stakeholder || patterns);
     const status: MeetingArchive["metadata"]["status"] = transcript
       ? "analysiert"
@@ -693,11 +713,9 @@ export default function Home() {
         ? "transkribiert"
         : audioSourceLabel
           ? "aufgenommen"
-          : agenda || preparation
-            ? "geplant"
-            : hasAnalysis
-              ? "analysiert"
-              : "geplant";
+          : hasAnalysis
+            ? "analysiert"
+            : meetingMetadata.status;
 
     return {
       schemaVersion: 1,
@@ -705,12 +723,12 @@ export default function Home() {
       savedAt: new Date().toISOString(),
       appVersion: "Meeting Intelligence KI Arbeitsversion",
       metadata: {
-        title,
-        date: new Date().toISOString().slice(0, 10),
+        title: currentMeetingTitle,
+        date: meetingMetadata.date,
         status,
-        participants: agendaInput.participants || preparationInput.participants,
-        goal: agendaInput.meetingGoal || preparationInput.goal,
-        desiredOutcome: agendaInput.desiredOutcome || preparationInput.desiredOutcome
+        participants: meetingMetadata.participants || agendaInput.participants || preparationInput.participants,
+        goal: meetingMetadata.goal || agendaInput.meetingGoal || preparationInput.goal,
+        desiredOutcome: meetingMetadata.desiredOutcome || agendaInput.desiredOutcome || preparationInput.desiredOutcome
       },
       agenda: {
         input: agendaInput,
@@ -850,6 +868,14 @@ export default function Home() {
   }
 
   function applyMeetingArchive(archive: MeetingArchive) {
+    setMeetingMetadata({
+      title: archive.metadata.title || "Geladene Meeting-Akte",
+      date: archive.metadata.date || new Date().toISOString().slice(0, 10),
+      participants: archive.metadata.participants,
+      goal: archive.metadata.goal,
+      desiredOutcome: archive.metadata.desiredOutcome,
+      status: archive.metadata.status
+    });
     setAgendaInput(archive.agenda.input);
     setAgenda(archive.agenda.result);
     setPreparationInput(archive.preparation.input);
@@ -986,6 +1012,7 @@ export default function Home() {
   }
 
   function startNewMeeting() {
+    setMeetingMetadata(createInitialMeetingMetadata());
     setPreparationInput(initialPreparation);
     setPreparation(null);
     setAgendaInput(initialAgenda);
@@ -1161,6 +1188,49 @@ export default function Home() {
                 </p>
               </article>
             </div>
+            <article className="card meeting-file-card">
+              <div className="meeting-file-card__header">
+                <div>
+                  <h2>Aktuelle Meeting-Akte</h2>
+                  <p className="lead">Diese Stammdaten werden für Agenda, Analyse, Export und Projektakte verwendet.</p>
+                </div>
+                <span className="meeting-status-pill">{meetingMetadata.status}</span>
+              </div>
+              <div className="meeting-file-form">
+                <Field label="Meeting-Titel">
+                  <input value={meetingMetadata.title} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, title: event.target.value })} />
+                </Field>
+                <Field label="Datum">
+                  <input type="date" value={meetingMetadata.date} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, date: event.target.value })} />
+                </Field>
+                <Field label="Status">
+                  <select value={meetingMetadata.status} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, status: event.target.value as MeetingStatus })}>
+                    <option value="geplant">geplant</option>
+                    <option value="aufgenommen">aufgenommen</option>
+                    <option value="transkribiert">transkribiert</option>
+                    <option value="analysiert">analysiert</option>
+                    <option value="abgeschlossen">abgeschlossen</option>
+                  </select>
+                </Field>
+                <Field label="Teilnehmer">
+                  <textarea value={meetingMetadata.participants} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, participants: event.target.value })} />
+                </Field>
+                <Field label="Ziel">
+                  <textarea value={meetingMetadata.goal} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, goal: event.target.value })} />
+                </Field>
+                <Field label="Gewünschtes Ergebnis">
+                  <textarea value={meetingMetadata.desiredOutcome} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, desiredOutcome: event.target.value })} />
+                </Field>
+              </div>
+              <div className="button-row">
+                <button className="primary-button" onClick={saveCurrentMeetingInBrowser} type="button">
+                  <Archive size={17} /> Aktuelle Akte speichern
+                </button>
+                <button className="secondary-button" onClick={downloadCurrentMeetingMarkdown} type="button">
+                  <FileText size={17} /> Ergebnis als Markdown
+                </button>
+              </div>
+            </article>
             <div className="workflow-steps">
               {[
                 { title: "1. Agenda", detail: "Agenda entwerfen, bestehende Agenda einfügen oder Datei laden.", target: "agenda" as AreaId, icon: ListChecks },
@@ -1320,6 +1390,46 @@ export default function Home() {
                 </div>
               </div>
             )}
+            <div className="analysis-lane">
+              <h2>Ergebnisprotokoll & Maßnahmenregister</h2>
+              <div className="protocol-grid">
+                <section className="result-block">
+                  <h3>Management Summary</h3>
+                  <p>{transcript?.managementSummary ?? "Noch keine Transkriptanalyse vorhanden."}</p>
+                </section>
+                <ResultSection title="Entscheidungen" items={transcript?.decisions ?? []} />
+                <ResultSection title="Offene Punkte" items={transcript?.openPoints ?? []} />
+                <ResultSection title="Risiken" items={transcript?.openRisks ?? []} />
+              </div>
+              {transcript?.actionPlan?.length ? (
+                <div className="measure-register">
+                  {transcript.actionPlan.map((item) => (
+                    <article className="measure-row" key={`${item.task}-${item.owner}`}>
+                      <div>
+                        <strong>{item.task}</strong>
+                        <span>{item.risk}</span>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>Owner</dt>
+                          <dd>{item.owner}</dd>
+                        </div>
+                        <div>
+                          <dt>Frist</dt>
+                          <dd>{item.due}</dd>
+                        </div>
+                        <div>
+                          <dt>Priorität</dt>
+                          <dd>{item.priority}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="result-note">Noch kein Maßnahmenregister vorhanden. Erzeuge zuerst eine Transkriptanalyse.</p>
+              )}
+            </div>
           </section>
         )}
 
