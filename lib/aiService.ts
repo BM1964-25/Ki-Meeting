@@ -22,6 +22,22 @@ export type AiServiceConfig = {
   mode: AiServiceMode;
   provider: AiServiceProvider;
   apiKey?: string;
+  onResultMeta?: (meta: AiResultMeta) => void;
+};
+
+export type AiResultSource = "Mock" | "OpenAI" | "Anthropic";
+
+export type AiResultMeta = {
+  source: AiResultSource;
+  model: string;
+  fallback: boolean;
+  message: string;
+  generatedAt: string;
+};
+
+export type AiServiceResult<T> = {
+  data: T;
+  meta: AiResultMeta;
 };
 
 const mockConfig: AiServiceConfig = {
@@ -33,6 +49,19 @@ const OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const OPENAI_TEXT_MODEL = "gpt-5.2";
 const ANTHROPIC_TEXT_MODEL = "claude-opus-4-6";
 const MAX_TRANSCRIPTION_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+function createAiMeta(source: AiResultSource, model: string, fallback: boolean, message: string): AiResultMeta {
+  return {
+    source,
+    model,
+    fallback,
+    message,
+    generatedAt: new Date().toLocaleString("de-DE", {
+      dateStyle: "short",
+      timeStyle: "short"
+    })
+  };
+}
 
 function buildJsonPrompt(task: string, input: unknown, mockResult: unknown) {
   return [
@@ -141,32 +170,62 @@ async function routeAiRequest<T>(
   task = "Strukturierte Meeting-Analyse",
   input?: unknown
 ): Promise<T> {
+  const result = await routeAiServiceResult(config, mockResult, task, input);
+  config?.onResultMeta?.(result.meta);
+  return result.data;
+}
+
+async function routeAiServiceResult<T>(
+  config: AiServiceConfig | undefined,
+  mockResult: T,
+  task = "Strukturierte Meeting-Analyse",
+  input?: unknown
+): Promise<AiServiceResult<T>> {
   const activeConfig = config ?? mockConfig;
 
   if (activeConfig.mode === "mock" || activeConfig.provider === "mock") {
     await delay();
-    return mockResult;
+    return {
+      data: mockResult,
+      meta: createAiMeta("Mock", "mock-analysis", false, "Mock-KI: Es wurden keine Daten extern verarbeitet.")
+    };
   }
 
   if (!activeConfig.apiKey) {
-    return mockResult;
+    return {
+      data: mockResult,
+      meta: createAiMeta("Mock", "mock-analysis", true, "Kein API-Schlüssel vorhanden. Fallback auf Mock-KI.")
+    };
   }
 
   const prompt = buildJsonPrompt(task, input ?? {}, mockResult);
 
   try {
     if (activeConfig.provider === "openai") {
-      return await callOpenAiJson(prompt, activeConfig.apiKey, mockResult);
+      return {
+        data: await callOpenAiJson(prompt, activeConfig.apiKey, mockResult),
+        meta: createAiMeta("OpenAI", OPENAI_TEXT_MODEL, false, "Echte Textanalyse über OpenAI Responses API.")
+      };
     }
 
     if (activeConfig.provider === "anthropic") {
-      return await callAnthropicJson(prompt, activeConfig.apiKey, mockResult);
+      return {
+        data: await callAnthropicJson(prompt, activeConfig.apiKey, mockResult),
+        meta: createAiMeta("Anthropic", ANTHROPIC_TEXT_MODEL, false, "Echte Textanalyse über Anthropic Messages API.")
+      };
     }
   } catch (error) {
     console.warn(error);
+    return {
+      data: mockResult,
+      meta: createAiMeta("Mock", "mock-analysis", true, error instanceof Error ? `${error.message} Fallback auf Mock-KI.` : "API-Fehler. Fallback auf Mock-KI.")
+    };
   }
 
-  return mockResult;
+  return {
+    data: mockResult,
+    meta: createAiMeta("Mock", "mock-analysis", true, "Unbekannter Anbieter. Fallback auf Mock-KI.")
+  };
 }
 
 function createMockTranscriptionResult(sourceLabel: string, durationLabel: string): TranscriptionResult {

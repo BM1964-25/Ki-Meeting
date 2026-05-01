@@ -37,6 +37,7 @@ import { PrivacyNotice } from "@/components/PrivacyNotice";
 import { ResultSection } from "@/components/ResultSection";
 import { RiskBadge } from "@/components/RiskBadge";
 import {
+  AiResultMeta,
   AiServiceConfig,
   analyzeMeetingPatterns,
   analyzeMeetingArchives,
@@ -355,6 +356,7 @@ export default function Home() {
   const [aiSettingsStatus, setAiSettingsStatus] = useState(initialAiSettings.apiKey ? "Gespeicherter Schlüssel lokal geladen." : "Noch kein API-Schlüssel lokal gespeichert.");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [aiConsentDialog, setAiConsentDialog] = useState<AiConsentDialog | null>(null);
+  const [lastAiResultMeta, setLastAiResultMeta] = useState<AiResultMeta | null>(null);
 
   const dashboardStats = useMemo(
     () => ({
@@ -375,7 +377,8 @@ export default function Home() {
   const activeAiConfig: AiServiceConfig = {
     mode: aiMode,
     provider: aiMode === "api" ? apiProvider : "mock",
-    apiKey: anthropicApiKey.trim()
+    apiKey: anthropicApiKey.trim(),
+    onResultMeta: setLastAiResultMeta
   };
   const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
   const activeChunkNumber = recordingMode === "long"
@@ -702,6 +705,16 @@ export default function Home() {
       const result = await transcribeMeetingAudio(audioBlob, audioSourceLabel || "Audiodatei", recordingDurationLabel, activeAiConfig);
       setTranscription(result);
       setTranscriptText(result.transcript);
+      setLastAiResultMeta({
+        source: result.provider,
+        model: result.model,
+        fallback: result.provider === "Mock" && activeAiConfig.mode === "api",
+        message: result.note,
+        generatedAt: new Date().toLocaleString("de-DE", {
+          dateStyle: "short",
+          timeStyle: "short"
+        })
+      });
       setTranscriptionNotice(result.provider === "OpenAI"
         ? "Echtes Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen."
         : "Mock-Transkript wurde erzeugt und zusätzlich in „Transkript analysieren“ übernommen.");
@@ -709,6 +722,16 @@ export default function Home() {
       const message = error instanceof Error ? error.message : "Transkription konnte nicht erzeugt werden.";
       setTranscriptionError(message);
       setTranscriptionNotice("Transkription fehlgeschlagen. Bitte Einstellungen, Anbieter und Dateigröße prüfen.");
+      setLastAiResultMeta({
+        source: "Mock",
+        model: "keine Transkription erzeugt",
+        fallback: true,
+        message,
+        generatedAt: new Date().toLocaleString("de-DE", {
+          dateStyle: "short",
+          timeStyle: "short"
+        })
+      });
     } finally {
       setLoadingAction(null);
     }
@@ -1254,6 +1277,16 @@ export default function Home() {
             {aiStatusLabel}
           </span>
         </header>
+
+        {lastAiResultMeta && (
+          <section className={`ai-result-banner ${lastAiResultMeta.fallback ? "ai-result-banner--fallback" : `ai-result-banner--${lastAiResultMeta.source.toLowerCase()}`}`}>
+            <div>
+              <strong>Letztes KI-Ergebnis: {lastAiResultMeta.source}</strong>
+              <span>Modell: {lastAiResultMeta.model} · {lastAiResultMeta.generatedAt}</span>
+            </div>
+            <p>{lastAiResultMeta.message}</p>
+          </section>
+        )}
 
         {activeArea === "dashboard" && (
           <section className="section">
