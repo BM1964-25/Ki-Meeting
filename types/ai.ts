@@ -169,6 +169,16 @@ export type MeetingArchive = {
   stakeholderAnalysis: StakeholderAnalysisResult | null;
   patternAnalysis: MeetingPatternsResult | null;
   qualityReview?: AiQualityReview;
+  timeline?: MeetingArchiveTimelineEvent[];
+};
+
+export type MeetingArchiveTimelineEvent = {
+  id: string;
+  label: string;
+  timestamp: string;
+  category: "Akte" | "Agenda" | "Vorbereitung" | "Audio" | "Transkript" | "Analyse" | "Entscheidung" | "Maßnahmen" | "Export";
+  status: "erledigt" | "offen" | "hinweis";
+  detail: string;
 };
 
 export type MultiMeetingArchiveAnalysisResult = {

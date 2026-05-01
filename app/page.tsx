@@ -57,6 +57,7 @@ import {
   DecisionChallengeResult,
   MeetingPatternsResult,
   MeetingArchive,
+  MeetingArchiveTimelineEvent,
   MeetingPreparationInput,
   MeetingPreparationResult,
   MeetingScenario,
@@ -468,6 +469,7 @@ export default function Home() {
 
     return savedArchives.find((archive) => archive.id === selectedArchiveId) ?? filteredArchives[0] ?? null;
   }, [filteredArchives, savedArchives, selectedArchiveId]);
+  const selectedArchiveTimeline = selectedArchive ? getArchiveTimeline(selectedArchive) : [];
   const qualityReview: AiQualityReview = useMemo(() => {
     const missingInputs = [
       !hasMeaningfulText(currentMeetingTitle) || currentMeetingTitle === "Neue Meeting-Akte" ? "Meeting-Titel präzisieren" : "",
@@ -948,6 +950,50 @@ export default function Home() {
     reader.readAsText(file);
   }
 
+  function createTimelineEvent(
+    id: string,
+    label: string,
+    timestamp: string,
+    category: MeetingArchiveTimelineEvent["category"],
+    status: MeetingArchiveTimelineEvent["status"],
+    detail: string
+  ): MeetingArchiveTimelineEvent {
+    return { id, label, timestamp, category, status, detail };
+  }
+
+  function createCurrentTimeline(savedAt: string, archiveStatus: MeetingArchive["metadata"]["status"]): MeetingArchiveTimelineEvent[] {
+    return [
+      createTimelineEvent("akte-angelegt", "Meeting-Akte angelegt", savedAt, "Akte", "erledigt", `Status beim Speichern: ${archiveStatus}.`),
+      createTimelineEvent("agenda", agenda ? "Agenda geprüft" : "Agenda noch offen", savedAt, "Agenda", agenda ? "erledigt" : "offen", agenda ? `${agenda.refinedAgenda.length} Agenda-Punkte strukturiert.` : "Noch keine Agenda-Prüfung gespeichert."),
+      createTimelineEvent("vorbereitung", preparation ? "Vorbereitung erzeugt" : "Vorbereitung noch offen", savedAt, "Vorbereitung", preparation ? "erledigt" : "offen", preparation ? `${preparation.arguments.length} Argumente und ${preparation.criticalQuestions.length} kritische Fragen gespeichert.` : "Noch keine Meeting-Vorbereitung gespeichert."),
+      createTimelineEvent("audio", audioSourceLabel ? "Audioquelle vorhanden" : "Audio noch offen", savedAt, "Audio", audioSourceLabel ? "erledigt" : "offen", audioSourceLabel ? `${audioSourceLabel} · ${recordingDurationLabel}.` : "Noch keine Aufnahme oder Audiodatei gespeichert."),
+      createTimelineEvent("transkript", transcription || transcriptText ? "Transkript vorhanden" : "Transkript noch offen", savedAt, "Transkript", transcription || transcriptText ? "erledigt" : "offen", transcription ? `${transcription.provider} · ${transcription.model} · Qualität: ${transcription.confidence}.` : transcriptText ? "Rohtext wurde manuell eingefügt." : "Noch kein Transkript gespeichert."),
+      createTimelineEvent("analyse", transcript ? "Transkriptanalyse erstellt" : "Analyse noch offen", savedAt, "Analyse", transcript ? "erledigt" : "offen", transcript ? `${transcript.openRisks.length} Risiken, ${transcript.openPoints.length} offene Punkte und ${transcript.followUpQuestions.length} Nachfragen erkannt.` : "Noch keine strategische Transkriptanalyse gespeichert."),
+      createTimelineEvent("entscheidungen", decision || transcript?.decisions.length ? "Entscheidungen dokumentiert" : "Entscheidungen noch offen", savedAt, "Entscheidung", decision || transcript?.decisions.length ? "erledigt" : "offen", decision ? `Devil's Advocate: Risiko ${decision.risk.level}.` : transcript?.decisions.length ? `${transcript.decisions.length} Entscheidungen aus Transkriptanalyse gespeichert.` : "Noch keine Entscheidung dokumentiert."),
+      createTimelineEvent("massnahmen", transcript?.actionPlan.length ? "Maßnahmen abgeleitet" : "Maßnahmen noch offen", savedAt, "Maßnahmen", transcript?.actionPlan.length ? "erledigt" : "offen", transcript?.actionPlan.length ? `${transcript.actionPlan.length} Maßnahmen mit Owner, Frist und Priorität gespeichert.` : "Noch kein Maßnahmenregister gespeichert."),
+      createTimelineEvent("export", "Exportstand vorbereitet", savedAt, "Export", "hinweis", "JSON-, Markdown- und Management-Exporte können aus dieser Akte erzeugt werden.")
+    ];
+  }
+
+  function getArchiveTimeline(archive: MeetingArchive): MeetingArchiveTimelineEvent[] {
+    if (archive.timeline?.length) {
+      return archive.timeline;
+    }
+
+    const savedAt = archive.savedAt;
+    return [
+      createTimelineEvent("akte-angelegt", "Meeting-Akte gespeichert", savedAt, "Akte", "erledigt", `Status: ${archive.metadata.status}.`),
+      createTimelineEvent("agenda", archive.agenda.result || archive.agenda.input.agendaText || archive.agenda.input.existingAgenda ? "Agenda vorhanden" : "Agenda noch offen", savedAt, "Agenda", archive.agenda.result || archive.agenda.input.agendaText || archive.agenda.input.existingAgenda ? "erledigt" : "offen", archive.agenda.result ? `${archive.agenda.result.refinedAgenda.length} Agenda-Punkte strukturiert.` : "Aus älterer Akte berechnet."),
+      createTimelineEvent("vorbereitung", archive.preparation.result ? "Vorbereitung vorhanden" : "Vorbereitung noch offen", savedAt, "Vorbereitung", archive.preparation.result ? "erledigt" : "offen", archive.preparation.result ? `${archive.preparation.result.arguments.length} Argumente gespeichert.` : "Keine Vorbereitung in dieser Akte."),
+      createTimelineEvent("audio", archive.audio.sourceLabel ? "Audioquelle vorhanden" : "Audio noch offen", savedAt, "Audio", archive.audio.sourceLabel ? "erledigt" : "offen", archive.audio.sourceLabel ? `${archive.audio.sourceLabel} · ${archive.audio.durationLabel}.` : "Keine Audioquelle gespeichert."),
+      createTimelineEvent("transkript", archive.transcription.rawText ? "Transkript vorhanden" : "Transkript noch offen", savedAt, "Transkript", archive.transcription.rawText ? "erledigt" : "offen", archive.transcription.result ? `${archive.transcription.result.provider} · ${archive.transcription.result.model}.` : "Aus älterer Akte berechnet."),
+      createTimelineEvent("analyse", archive.transcriptAnalysis ? "Analyse vorhanden" : "Analyse noch offen", savedAt, "Analyse", archive.transcriptAnalysis ? "erledigt" : "offen", archive.transcriptAnalysis ? `${archive.transcriptAnalysis.openRisks.length} Risiken und ${archive.transcriptAnalysis.openPoints.length} offene Punkte gespeichert.` : "Keine Analyse in dieser Akte."),
+      createTimelineEvent("entscheidungen", archive.decisionChallenge || archive.transcriptAnalysis?.decisions.length ? "Entscheidungen vorhanden" : "Entscheidungen noch offen", savedAt, "Entscheidung", archive.decisionChallenge || archive.transcriptAnalysis?.decisions.length ? "erledigt" : "offen", archive.decisionChallenge ? `Devil's Advocate: Risiko ${archive.decisionChallenge.risk.level}.` : `${archive.transcriptAnalysis?.decisions.length ?? 0} Entscheidungen gespeichert.`),
+      createTimelineEvent("massnahmen", archive.transcriptAnalysis?.actionPlan.length ? "Maßnahmen vorhanden" : "Maßnahmen noch offen", savedAt, "Maßnahmen", archive.transcriptAnalysis?.actionPlan.length ? "erledigt" : "offen", `${archive.transcriptAnalysis?.actionPlan.length ?? 0} Maßnahmen gespeichert.`),
+      createTimelineEvent("export", "Exportstand verfügbar", savedAt, "Export", "hinweis", "Exporte können aus der Detailansicht erzeugt werden.")
+    ];
+  }
+
   function createCurrentMeetingArchive(): MeetingArchive {
     const hasAnalysis = Boolean(transcript || agenda || preparation || decision || simulation || stakeholder || patterns);
     const status: MeetingArchive["metadata"]["status"] = transcript
@@ -960,10 +1006,12 @@ export default function Home() {
             ? "analysiert"
             : meetingMetadata.status;
 
+    const savedAt = new Date().toISOString();
+
     return {
       schemaVersion: 1,
       id: currentArchiveId,
-      savedAt: new Date().toISOString(),
+      savedAt,
       appVersion: "Meeting Intelligence KI Arbeitsversion",
       metadata: {
         title: currentMeetingTitle,
@@ -997,7 +1045,8 @@ export default function Home() {
       simulation,
       stakeholderAnalysis: stakeholder,
       patternAnalysis: patterns,
-      qualityReview
+      qualityReview,
+      timeline: createCurrentTimeline(savedAt, status)
     };
   }
 
@@ -1089,7 +1138,10 @@ export default function Home() {
       "",
       "## Qualitätsprüfung",
       `Belastbarkeit: ${archive.qualityReview?.level ?? "nicht bewertet"} (${archive.qualityReview?.score ?? 0}/100)`,
-      ...(archive.qualityReview?.reliabilityNotes ?? ["Noch keine Qualitätsnotizen vorhanden."]).map((item) => `- ${item}`)
+      ...(archive.qualityReview?.reliabilityNotes ?? ["Noch keine Qualitätsnotizen vorhanden."]).map((item) => `- ${item}`),
+      "",
+      "## Chronologie",
+      ...getArchiveTimeline(archive).map((item) => `- ${new Date(item.timestamp).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} | ${item.category} | ${item.label}: ${item.detail}`)
     ];
 
     return lines.join("\n");
@@ -2001,6 +2053,30 @@ export default function Home() {
                   <MetricCard icon={ShieldQuestion} label="Entscheidungen" value={String(selectedArchive.transcriptAnalysis?.decisions.length ?? 0)} detail="aus Analyse" />
                   <MetricCard icon={ListChecks} label="Maßnahmen" value={String(selectedArchive.transcriptAnalysis?.actionPlan.length ?? 0)} detail="im Register" />
                 </div>
+
+                <section className="archive-timeline">
+                  <div className="archive-timeline__header">
+                    <h3>Chronologie</h3>
+                    <p>Zeigt, welche Arbeitsschritte in dieser Akte bereits vorhanden sind und wann der aktuelle Stand gespeichert wurde.</p>
+                  </div>
+                  <div className="timeline-list">
+                    {selectedArchiveTimeline.map((event) => (
+                      <article className={`timeline-item timeline-item--${event.status}`} key={event.id}>
+                        <div className="timeline-item__marker" aria-hidden="true" />
+                        <div>
+                          <div className="timeline-item__meta">
+                            <span>{event.category}</span>
+                            <time dateTime={event.timestamp}>
+                              {new Date(event.timestamp).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}
+                            </time>
+                          </div>
+                          <strong>{event.label}</strong>
+                          <p>{event.detail}</p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
 
                 <div className="archive-detail-grid">
                   <section className="result-block">
