@@ -306,6 +306,7 @@ h3 {
   gap: 9px;
   min-height: 44px;
   padding: 0 16px;
+  text-decoration: none;
 }
 
 .secondary-button:hover:not(:disabled) {
@@ -324,6 +325,24 @@ h3 {
   border-radius: 8px;
   margin-top: 18px;
   padding: 16px;
+}
+
+.recording-consent {
+  background: #fff9ea;
+  border: 1px solid #f2d492;
+  border-radius: 8px;
+  color: #6f4d13;
+  line-height: 1.45;
+  margin: 16px 0 0;
+  padding: 12px;
+}
+
+.recording-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
 }
 
 .recording-status {
@@ -350,14 +369,134 @@ h3 {
   color: var(--yellow);
 }
 
+.speaking-indicator {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: 7px;
+}
+
+.speaking-indicator::before {
+  background: #a8b5c2;
+  border-radius: 999px;
+  content: "";
+  height: 10px;
+  width: 10px;
+}
+
+.speaking-indicator--active {
+  color: var(--green);
+}
+
+.speaking-indicator--active::before {
+  background: var(--green);
+  box-shadow: 0 0 0 5px rgba(31, 122, 77, 0.14);
+}
+
+.level-meter {
+  background: #e8edf2;
+  border-radius: 999px;
+  height: 12px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.level-meter__bar {
+  background: linear-gradient(90deg, var(--green), var(--accent), var(--red));
+  border-radius: inherit;
+  height: 100%;
+  min-width: 3px;
+  transition: width 110ms linear;
+}
+
+.recording-steps {
+  color: #344054;
+  margin: 16px 0 0;
+  padding-left: 20px;
+}
+
+.recording-steps li {
+  line-height: 1.45;
+  margin: 6px 0;
+}
+
+.recording-steps__done {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.recording-error {
+  background: #fde8e7;
+  border: 1px solid #f5b8b2;
+  border-radius: 8px;
+  color: var(--red);
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 14px 0 0;
+  padding: 11px 12px;
+}
+
 .audio-preview {
   display: grid;
   gap: 10px;
   margin-top: 18px;
 }
 
+.audio-preview p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
 .audio-preview audio {
   width: 100%;
+}
+
+.file-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+}
+
+.file-details div {
+  border-bottom: 1px solid var(--line);
+  padding: 12px;
+}
+
+.file-details div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.file-details div:nth-child(odd) {
+  border-right: 1px solid var(--line);
+}
+
+.file-details dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.file-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.download-link {
+  justify-content: center;
+}
+
+.audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .upload-box {
@@ -390,6 +529,26 @@ h3 {
   padding: 18px;
 }
 
+.result-block--wide {
+  grid-column: 1 / -1;
+}
+
+.transcript-raw,
+.mail-draft {
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #344054;
+  line-height: 1.55;
+  margin: 0;
+  padding: 13px;
+  white-space: pre-wrap;
+}
+
+.mail-draft {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
 .result-block ul,
 .plain-list {
   margin: 0;
@@ -417,6 +576,44 @@ h3 {
 .privacy-notice p {
   line-height: 1.45;
   margin: 0;
+}
+
+.loading-indicator {
+  align-items: center;
+  background: #fff3f0;
+  border: 1px solid #f2b8ad;
+  border-radius: 8px;
+  color: #9f2f1f;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.loading-spinner {
+  animation: spin 0.85s linear infinite;
+  border: 3px solid rgba(180, 35, 24, 0.2);
+  border-top-color: var(--red);
+  border-radius: 999px;
+  display: inline-block;
+  height: 22px;
+  width: 22px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.result-note {
+  background: #eef7fa;
+  border: 1px solid #c5e3ea;
+  border-radius: 8px;
+  color: var(--primary-dark);
+  line-height: 1.45;
+  margin: 0 0 12px;
+  padding: 11px 12px;
 }
 
 .scenario-grid {
@@ -497,8 +694,20 @@ h3 {
   .result-grid,
   .scenario-grid,
   .grid--metrics,
+  .file-details,
   .setting-row {
     grid-template-columns: 1fr;
+  }
+
+  .file-details div,
+  .file-details div:nth-child(odd),
+  .file-details div:nth-last-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .file-details div:last-child {
+    border-bottom: 0;
   }
 
   .topbar {

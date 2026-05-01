@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
   Brain,
   ClipboardCheck,
+  Download,
   Mic,
   PauseCircle,
   FileSearch,
@@ -20,6 +21,7 @@ import {
   Users
 } from "lucide-react";
 import { Field } from "@/components/Field";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { MetricCard } from "@/components/MetricCard";
 import { PrivacyNotice } from "@/components/PrivacyNotice";
 import { ResultSection } from "@/components/ResultSection";
@@ -59,7 +61,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
   { id: "record", label: "Meeting aufnehmen", icon: Mic },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
-  { id: "decision", label: "Entscheidung pruefen", icon: ShieldQuestion },
+  { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
   { id: "simulate", label: "Meeting simulieren", icon: PlayCircle },
   { id: "transcript", label: "Transkript analysieren", icon: FileSearch },
   { id: "stakeholder", label: "Stakeholder analysieren", icon: Users },
@@ -81,11 +83,29 @@ export default function Home() {
   const [activeArea, setActiveArea] = useState<AreaId>("dashboard");
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "ready">("idle");
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioSourceLabel, setAudioSourceLabel] = useState("");
+  const [audioFileName, setAudioFileName] = useState("");
   const [recordingDurationLabel, setRecordingDurationLabel] = useState("unbekannt");
+  const [recordingError, setRecordingError] = useState("");
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(null);
+  const [loadingAction, setLoadingAction] = useState<
+    | null
+    | "preparation"
+    | "decision"
+    | "simulation"
+    | "transcript"
+    | "stakeholder"
+    | "patterns"
+    | "transcription"
+  >(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const [preparationInput, setPreparationInput] = useState(initialPreparation);
   const [preparation, setPreparation] = useState<MeetingPreparationResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
@@ -117,6 +137,17 @@ export default function Home() {
   );
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
+  const audioSizeLabel = audioBlob ? `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB` : "";
+
+  useEffect(() => {
+    return () => {
+      stopLevelMeter();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
 
   function clearAudioUrl() {
     if (audioUrl) {
@@ -124,50 +155,125 @@ export default function Home() {
     }
   }
 
+  function stopLevelMeter() {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    audioContextRef.current?.close();
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    setAudioLevel(0);
+    setIsSpeaking(false);
+  }
+
+  function startLevelMeter(stream: MediaStream) {
+    stopLevelMeter();
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+    const data = new Uint8Array(analyser.fftSize);
+
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    const updateMeter = () => {
+      analyser.getByteTimeDomainData(data);
+      const sum = data.reduce((total, value) => {
+        const normalized = (value - 128) / 128;
+        return total + normalized * normalized;
+      }, 0);
+      const rms = Math.sqrt(sum / data.length);
+      const level = Math.min(100, Math.round(rms * 220));
+
+      setAudioLevel(level);
+      setIsSpeaking(level > 8);
+      animationFrameRef.current = requestAnimationFrame(updateMeter);
+    };
+
+    updateMeter();
+  }
+
+  function createRecordingFileName() {
+    const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "");
+    return `meeting-aufnahme-${stamp}.webm`;
+  }
+
   async function startRecording() {
-    clearAudioUrl();
-    setTranscription(null);
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream);
-    const chunks: BlobPart[] = [];
-    const startedAt = Date.now();
+    try {
+      clearAudioUrl();
+      stopLevelMeter();
+      setTranscription(null);
+      setRecordingError("");
+      setAudioBlob(null);
+      setAudioFileName("");
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunks.push(event.data);
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        setRecordingError("Dieser Browser unterstützt Aufnahme über Mikrofon nicht.");
+        return;
       }
-    };
 
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach((track) => track.stop());
-      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-      const nextUrl = URL.createObjectURL(blob);
-      const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-      setAudioBlob(blob);
-      setAudioUrl(nextUrl);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      const startedAt = Date.now();
+      mediaStreamRef.current = stream;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        stopLevelMeter();
+        mediaStreamRef.current = null;
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        const nextUrl = URL.createObjectURL(blob);
+        const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const fileName = createRecordingFileName();
+        setAudioBlob(blob);
+        setAudioUrl(nextUrl);
+        setAudioSourceLabel("Browser-Aufnahme");
+        setAudioFileName(fileName);
+        setRecordingDurationLabel(`${seconds} Sekunden`);
+        setRecordingState("ready");
+        setRecorder(null);
+      };
+
+      mediaRecorder.start();
+      startLevelMeter(stream);
+      setRecorder(mediaRecorder);
       setAudioSourceLabel("Browser-Aufnahme");
-      setRecordingDurationLabel(seconds ? `${seconds} Sekunden` : "kurze Aufnahme");
-      setRecordingState("ready");
-      setRecorder(null);
-    };
-
-    mediaRecorder.start();
-    setRecorder(mediaRecorder);
-    setAudioBlob(null);
-    setAudioSourceLabel("Browser-Aufnahme");
-    setRecordingState("recording");
+      setRecordingState("recording");
+    } catch (error) {
+      setRecordingError(
+        error instanceof Error
+          ? `Aufnahme konnte nicht gestartet werden: ${error.message}`
+          : "Aufnahme konnte nicht gestartet werden."
+      );
+      setRecordingState("idle");
+      stopLevelMeter();
+    }
   }
 
   function pauseRecording() {
     if (recorder?.state === "recording") {
       recorder.pause();
       setRecordingState("paused");
+      stopLevelMeter();
     }
   }
 
   function resumeRecording() {
     if (recorder?.state === "paused") {
       recorder.resume();
+      if (mediaStreamRef.current) {
+        startLevelMeter(mediaStreamRef.current);
+      }
       setRecordingState("recording");
     }
   }
@@ -183,12 +289,15 @@ export default function Home() {
       return;
     }
     clearAudioUrl();
+    stopLevelMeter();
     setRecorder(null);
     setAudioBlob(file);
     setAudioUrl(URL.createObjectURL(file));
     setAudioSourceLabel(file.name);
+    setAudioFileName(file.name);
     setRecordingDurationLabel("hochgeladene Audiodatei");
     setRecordingState("ready");
+    setRecordingError("");
     setTranscription(null);
   }
 
@@ -196,39 +305,74 @@ export default function Home() {
     if (!audioBlob) {
       return;
     }
-    const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel);
-    setTranscription(result);
-    setTranscriptText(result.transcript);
+    setLoadingAction("transcription");
+    try {
+      const result = await transcribeMeetingAudio(audioSourceLabel || "Audiodatei", recordingDurationLabel);
+      setTranscription(result);
+      setTranscriptText(result.transcript);
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handlePreparation(event: FormEvent) {
     event.preventDefault();
-    setPreparation(await generateMeetingPreparation(preparationInput));
+    setLoadingAction("preparation");
+    try {
+      setPreparation(await generateMeetingPreparation(preparationInput));
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handleDecision(event: FormEvent) {
     event.preventDefault();
-    setDecision(await generateDecisionChallenge(decisionText));
+    setLoadingAction("decision");
+    try {
+      setDecision(await generateDecisionChallenge(decisionText));
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handleSimulation(event: FormEvent) {
     event.preventDefault();
-    setSimulation(await generateMeetingSimulation());
+    setLoadingAction("simulation");
+    try {
+      setSimulation(await generateMeetingSimulation());
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handleTranscript(event: FormEvent) {
     event.preventDefault();
-    setTranscript(await analyzeTranscript(transcriptText));
+    setLoadingAction("transcript");
+    try {
+      setTranscript(await analyzeTranscript(transcriptText));
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handleStakeholder(event: FormEvent) {
     event.preventDefault();
-    setStakeholder(await analyzeStakeholder());
+    setLoadingAction("stakeholder");
+    try {
+      setStakeholder(await analyzeStakeholder());
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   async function handlePatterns(event: FormEvent) {
     event.preventDefault();
-    setPatterns(await analyzeMeetingPatterns());
+    setLoadingAction("patterns");
+    try {
+      setPatterns(await analyzeMeetingPatterns());
+    } finally {
+      setLoadingAction(null);
+    }
   }
 
   return (
@@ -269,7 +413,7 @@ export default function Home() {
             <p className="eyebrow">Arbeitsversion</p>
             <h1>{pageTitle}</h1>
             <p className="lead">
-              Eine lokale Web-App fuer strategische Meeting-Vorbereitung, Entscheidungsschaerfung,
+              Eine lokale Web-App für strategische Meeting-Vorbereitung, Entscheidungsschärfung,
               Simulation und kontinuierliche Verbesserung der eigenen Meeting-Performance.
             </p>
           </div>
@@ -282,22 +426,22 @@ export default function Home() {
               <MetricCard icon={ClipboardCheck} label="Vorbereitete Meetings" value={dashboardStats.preparedMeetings} detail="in dieser Session" />
               <MetricCard icon={FileSearch} label="Analysierte Transkripte" value={dashboardStats.analyzedTranscripts} detail="lokale Eingaben" />
               <MetricCard icon={AlertTriangle} label="Offene kritische Fragen" value={dashboardStats.criticalQuestions} detail="aus Vorbereitung" />
-              <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwaende" value={dashboardStats.recurringObjections} detail="aus Musteranalyse" />
+              <MetricCard icon={MessageSquareText} label="Wiederkehrende Einwände" value={dashboardStats.recurringObjections} detail="aus Musteranalyse" />
             </div>
             <div className="grid grid--two">
               <article className="card">
                 <h2>Letzte Analysen</h2>
                 <ul className="plain-list">
                   <li>{preparation ? "Meeting-Vorbereitung erzeugt" : "Noch keine Meeting-Vorbereitung vorhanden"}</li>
-                  <li>{decision ? "Devil's-Advocate-Pruefung erzeugt" : "Noch keine Entscheidung geprueft"}</li>
+                  <li>{decision ? "Devil's-Advocate-Prüfung erzeugt" : "Noch keine Entscheidung geprüft"}</li>
                   <li>{patterns ? "Meeting-Muster ausgewertet" : "Noch keine Musteranalyse vorhanden"}</li>
                 </ul>
               </article>
               <article className="card">
-                <h2>Naechster sinnvoller Schritt</h2>
+                <h2>Nächster sinnvoller Schritt</h2>
                 <p className="lead">
-                  Beginne mit einer Vorbereitung oder pruefe eine anstehende Entscheidung. Die aktuelle
-                  Version nutzt strukturierte Mock-Ergebnisse und ist fuer spaetere KI-APIs vorbereitet.
+                  Beginne mit einer Vorbereitung oder prüfe eine anstehende Entscheidung. Die aktuelle
+                  Version nutzt strukturierte Mock-Ergebnisse und ist für spätere KI-APIs vorbereitet.
                 </p>
               </article>
             </div>
@@ -313,26 +457,76 @@ export default function Home() {
                 <p className="lead">
                   Aufnahme erfolgt lokal im Browser. Vor dem Start fragt der Browser nach Zugriff auf das Mikrofon.
                 </p>
+                <p className="recording-consent">
+                  Vor einer echten Meeting-Aufnahme sollten alle Teilnehmenden informiert sein und die
+                  notwendigen Zustimmungen sowie internen Vorgaben geklärt sein.
+                </p>
                 <div className="recording-panel">
-                  <span className={`recording-status recording-status--${recordingState}`}>
-                    Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme laeuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
-                  </span>
+                  <div className="recording-header">
+                    <span className={`recording-status recording-status--${recordingState}`}>
+                      Status: {recordingState === "idle" ? "bereit" : recordingState === "recording" ? "Aufnahme läuft" : recordingState === "paused" ? "pausiert" : "Audio bereit"}
+                    </span>
+                    <span className={isSpeaking ? "speaking-indicator speaking-indicator--active" : "speaking-indicator"}>
+                      {isSpeaking ? "Sprache erkannt" : recordingState === "recording" ? "Warte auf Sprache" : "Kein Live-Signal"}
+                    </span>
+                  </div>
+                  <div className="level-meter" aria-label="Mikrofonpegel">
+                    <div className="level-meter__bar" style={{ width: `${audioLevel}%` }} />
+                  </div>
+                  <ol className="recording-steps">
+                    <li className={recordingState !== "idle" ? "recording-steps__done" : ""}>Start drücken und Mikrofonzugriff erlauben.</li>
+                    <li className={recordingState === "recording" || recordingState === "paused" || recordingState === "ready" ? "recording-steps__done" : ""}>Sprechen beobachten: Pegel und Hinweis zeigen, ob Ton ankommt.</li>
+                    <li className={recordingState === "ready" ? "recording-steps__done" : ""}>Stopp drücken. Danach liegt die Aufnahme temporär im Browser vor.</li>
+                    <li className={audioUrl ? "recording-steps__done" : ""}>Mit Download dauerhaft als Datei speichern oder direkt transkribieren.</li>
+                  </ol>
                   <div className="button-row">
-                    <button className="primary-button" onClick={startRecording} type="button" disabled={recordingState === "recording"}>
-                      <Mic size={17} /> Start
+                    <button className="primary-button" onClick={startRecording} type="button" disabled={recordingState === "recording" || recordingState === "paused"}>
+                      <Mic size={17} /> Neue Aufnahme starten
                     </button>
                     <button className="secondary-button" onClick={recordingState === "paused" ? resumeRecording : pauseRecording} type="button" disabled={!recorder}>
-                      <PauseCircle size={17} /> {recordingState === "paused" ? "Fortsetzen" : "Pause"}
+                      <PauseCircle size={17} /> {recordingState === "paused" ? "Aufnahme fortsetzen" : "Aufnahme pausieren"}
                     </button>
                     <button className="secondary-button" onClick={stopRecording} type="button" disabled={!recorder}>
-                      <Square size={15} /> Stopp
+                      <Square size={15} /> Aufnahme stoppen
                     </button>
                   </div>
+                  {recordingError && <p className="recording-error">{recordingError}</p>}
                 </div>
                 {audioUrl && (
                   <div className="audio-preview">
                     <strong>{audioSourceLabel}</strong>
+                    <p>
+                      Die Aufnahme wurde nicht automatisch auf der Festplatte gespeichert. Sie liegt
+                      temporär im Browser-Speicher dieser Sitzung und kann hier angehört,
+                      heruntergeladen oder transkribiert werden.
+                    </p>
+                    <dl className="file-details">
+                      <div>
+                        <dt>Dateiname</dt>
+                        <dd>{audioFileName || audioSourceLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>Dauer</dt>
+                        <dd>{recordingDurationLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>Größe</dt>
+                        <dd>{audioSizeLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>Speicherort</dt>
+                        <dd>Temporär im Browser; dauerhaft erst nach Download.</dd>
+                      </div>
+                    </dl>
                     <audio controls src={audioUrl} />
+                    <div className="audio-actions">
+                      <a className="secondary-button download-link" download={audioFileName || "meeting-aufnahme.webm"} href={audioUrl}>
+                        <Download size={17} /> Aufnahme herunterladen
+                      </a>
+                      <button className="primary-button" onClick={handleTranscription} type="button">
+                        <Sparkles size={17} /> Diese Aufnahme transkribieren
+                      </button>
+                    </div>
                   </div>
                 )}
               </article>
@@ -344,27 +538,33 @@ export default function Home() {
                 </p>
                 <label className="upload-box">
                   <Upload size={22} aria-hidden="true" />
-                  <span>Audiodatei auswaehlen</span>
+                  <span>Audiodatei auswählen</span>
                   <input accept="audio/*" onChange={(event) => handleAudioUpload(event.target.files?.[0] ?? null)} type="file" />
                 </label>
                 <button className="primary-button" onClick={handleTranscription} type="button" disabled={!audioBlob}>
                   <Sparkles size={17} /> Transkription erzeugen
                 </button>
+                {loadingAction === "transcription" && <LoadingIndicator label="Transkription wird erzeugt ..." />}
               </article>
             </div>
+            {loadingAction === "transcription" && <LoadingIndicator label="KI arbeitet am Transkript ..." />}
             {transcription && (
               <div className="result-grid">
                 <section className="result-block">
                   <h3>Transkriptionsstatus</h3>
                   <p><strong>Quelle:</strong> {transcription.sourceLabel}</p>
                   <p><strong>Dauer:</strong> {transcription.durationLabel}</p>
-                  <p><strong>Qualitaet:</strong> {transcription.confidence}</p>
+                  <p><strong>Qualität:</strong> {transcription.confidence}</p>
                 </section>
                 <section className="result-block">
                   <h3>Erzeugtes Transkript</h3>
+                  <p className="result-note">
+                    Dieses Transkript wird hier angezeigt und wurde automatisch in das Textfeld im Bereich
+                    „Transkript analysieren“ übernommen.
+                  </p>
                   <p>{transcription.transcript}</p>
                   <button className="secondary-button" onClick={() => setActiveArea("transcript")} type="button">
-                    <FileSearch size={17} /> In Transkriptanalyse oeffnen
+                    <FileSearch size={17} /> In Transkriptanalyse öffnen
                   </button>
                 </section>
               </div>
@@ -388,7 +588,7 @@ export default function Home() {
               <Field label="Rollen der Teilnehmer">
                 <textarea value={preparationInput.roles} onChange={(event) => setPreparationInput({ ...preparationInput, roles: event.target.value })} />
               </Field>
-              <Field label="Gewuenschtes Ergebnis">
+              <Field label="Gewünschtes Ergebnis">
                 <textarea value={preparationInput.desiredOutcome} onChange={(event) => setPreparationInput({ ...preparationInput, desiredOutcome: event.target.value })} />
               </Field>
               <Field label="Kritische Themen">
@@ -401,10 +601,11 @@ export default function Home() {
                 <button className="primary-button" type="submit"><Sparkles size={17} /> Vorbereitung erzeugen</button>
               </div>
             </form>
+            {loadingAction === "preparation" && <LoadingIndicator label="KI erstellt die Meeting-Vorbereitung ..." />}
             {preparation && (
               <div className="result-grid">
                 <ResultSection title="Zentrale Argumente" items={preparation.arguments} />
-                <ResultSection title="Erwartbare Einwaende" items={preparation.objections} />
+                <ResultSection title="Erwartbare Einwände" items={preparation.objections} />
                 <ResultSection title="Kritische Fragen" items={preparation.criticalQuestions} />
                 <ResultSection title="Antwortstrategien" items={preparation.responseStrategies} />
               </div>
@@ -423,6 +624,7 @@ export default function Home() {
                 <button className="primary-button" type="submit"><ShieldQuestion size={17} /> Devil&apos;s Advocate starten</button>
               </div>
             </form>
+            {loadingAction === "decision" && <LoadingIndicator label="KI prüft die Entscheidung kritisch ..." />}
             {decision && (
               <div className="result-grid">
                 <section className="result-block">
@@ -430,7 +632,7 @@ export default function Home() {
                   <RiskBadge level={decision.risk.level} />
                   <p>{decision.risk.rationale}</p>
                 </section>
-                <ResultSection title="10 moegliche Schwachstellen" items={decision.weaknesses} />
+                <ResultSection title="10 mögliche Schwachstellen" items={decision.weaknesses} />
                 <ResultSection title="5 unbequeme Fragen" items={decision.uncomfortableQuestions} />
                 {Object.entries(decision.counterArguments).map(([role, items]) => (
                   <ResultSection key={role} title={`Gegenargumente: ${role}`} items={items} />
@@ -457,13 +659,14 @@ export default function Home() {
                 <button className="primary-button" type="submit"><PlayCircle size={17} /> Szenarien erzeugen</button>
               </div>
             </form>
+            {loadingAction === "simulation" && <LoadingIndicator label="KI simuliert mögliche Meeting-Verläufe ..." />}
             {simulation && (
               <div className="scenario-grid">
                 {simulation.map((scenario) => (
                   <article className="scenario-card" key={scenario.name}>
                     <h3>{scenario.name}</h3>
                     <ResultSection title="Wahrscheinlicher Verlauf" items={scenario.likelyFlow} />
-                    <ResultSection title="Moegliche Aussagen" items={scenario.participantStatements} />
+                    <ResultSection title="Mögliche Aussagen" items={scenario.participantStatements} />
                     <ResultSection title="Optimale Antworten" items={scenario.optimalResponses} />
                     <ResultSection title="Kritische Wendepunkte" items={scenario.turningPoints} />
                     <p><strong>Abschluss:</strong> {scenario.closingStatement}</p>
@@ -485,16 +688,41 @@ export default function Home() {
                 <button className="primary-button" type="submit"><FileSearch size={17} /> Transkript analysieren</button>
               </div>
             </form>
+            {transcriptText && (
+              <p className="result-note">
+                Der aktuell eingefügte Transkripttext steht in diesem Textfeld und kann hier analysiert werden.
+              </p>
+            )}
+            {loadingAction === "transcript" && <LoadingIndicator label="KI analysiert das Transkript ..." />}
             {transcript && (
-              <div className="result-grid">
-                <ResultSection title="Was wurde gesagt?" items={transcript.said} />
-                <ResultSection title="Was wurde nicht gesagt?" items={transcript.unsaid} />
-                <ResultSection title="Umgangene Themen" items={transcript.avoidedTopics} />
-                <ResultSection title="Widersprueche" items={transcript.contradictions} />
-                <ResultSection title="Offene Risiken" items={transcript.openRisks} />
-                <ResultSection title="Empfohlene Nachfragen" items={transcript.followUpQuestions} />
-                <ResultSection title="Zeitstempel" items={transcript.timestamps.length ? transcript.timestamps.map((item) => `${item.time}: ${item.note}`) : ["Keine Zeitstempel erkannt."]} />
-              </div>
+              <>
+                <div className="grid grid--two">
+                  <section className="result-block">
+                    <h3>Rohtranskript</h3>
+                    <p className="transcript-raw">{transcriptText}</p>
+                  </section>
+                  <section className="result-block">
+                    <h3>KI-Zusammenfassung</h3>
+                    <p>{transcript.summary}</p>
+                  </section>
+                </div>
+                <div className="result-grid">
+                  <ResultSection title="Was wurde gesagt?" items={transcript.said} />
+                  <ResultSection title="Was wurde nicht gesagt?" items={transcript.unsaid} />
+                  <ResultSection title="Umgangene Themen" items={transcript.avoidedTopics} />
+                  <ResultSection title="Widersprüche" items={transcript.contradictions} />
+                  <ResultSection title="Entscheidungen" items={transcript.decisions} />
+                  <ResultSection title="Aufgaben / Verantwortliche" items={transcript.tasks} />
+                  <ResultSection title="Offene Punkte" items={transcript.openPoints} />
+                  <ResultSection title="Offene Risiken" items={transcript.openRisks} />
+                  <ResultSection title="Empfohlene Nachfragen" items={transcript.followUpQuestions} />
+                  <ResultSection title="Zeitstempel" items={transcript.timestamps.length ? transcript.timestamps.map((item) => `${item.time}: ${item.note}`) : ["Keine Zeitstempel erkannt."]} />
+                  <section className="result-block result-block--wide">
+                    <h3>Follow-up-Mail-Entwurf</h3>
+                    <pre className="mail-draft">{transcript.followUpEmailDraft}</pre>
+                  </section>
+                </div>
+              </>
             )}
           </section>
         )}
@@ -507,19 +735,20 @@ export default function Home() {
               <Field label="Rolle"><input value={stakeholderInput.role} onChange={(event) => setStakeholderInput({ ...stakeholderInput, role: event.target.value })} /></Field>
               <Field label="Organisation"><input value={stakeholderInput.organisation} onChange={(event) => setStakeholderInput({ ...stakeholderInput, organisation: event.target.value })} /></Field>
               <Field label="Bekannte Interessen"><textarea value={stakeholderInput.interests} onChange={(event) => setStakeholderInput({ ...stakeholderInput, interests: event.target.value })} /></Field>
-              <Field label="Oeffentliche Aussagen oder Textauszuege"><textarea value={stakeholderInput.publicStatements} onChange={(event) => setStakeholderInput({ ...stakeholderInput, publicStatements: event.target.value })} /></Field>
+              <Field label="Öffentliche Aussagen oder Textauszüge"><textarea value={stakeholderInput.publicStatements} onChange={(event) => setStakeholderInput({ ...stakeholderInput, publicStatements: event.target.value })} /></Field>
               <Field label="Bisherige Erfahrungen"><textarea value={stakeholderInput.experience} onChange={(event) => setStakeholderInput({ ...stakeholderInput, experience: event.target.value })} /></Field>
               <div className="form-actions">
                 <button className="primary-button" type="submit"><Users size={17} /> Stakeholder analysieren</button>
               </div>
             </form>
+            {loadingAction === "stakeholder" && <LoadingIndicator label="KI analysiert den Stakeholder ..." />}
             {stakeholder && (
               <div className="result-grid">
                 <ResultSection title="Vermutete Interessen" items={stakeholder.inferredInterests} />
-                <ResultSection title="Moegliche Trigger" items={stakeholder.triggers} />
+                <ResultSection title="Mögliche Trigger" items={stakeholder.triggers} />
                 <ResultSection title="Typische Sprachmuster" items={stakeholder.languagePatterns} />
                 <ResultSection title="Gesprächsstrategie" items={stakeholder.conversationStrategy} />
-                <ResultSection title="Gut anschliessende Formulierungen" items={stakeholder.connectingPhrases} />
+                <ResultSection title="Gut anschließende Formulierungen" items={stakeholder.connectingPhrases} />
                 <ResultSection title="Zu vermeidende Formulierungen" items={stakeholder.avoidPhrases} />
               </div>
             )}
@@ -537,14 +766,15 @@ export default function Home() {
                 <button className="primary-button" type="submit"><BarChart3 size={17} /> Muster erkennen</button>
               </div>
             </form>
+            {loadingAction === "patterns" && <LoadingIndicator label="KI erkennt wiederkehrende Meeting-Muster ..." />}
             {patterns && (
               <div className="result-grid">
-                <ResultSection title="Wiederkehrende Einwaende" items={patterns.recurringObjections} />
-                <ResultSection title="Eigene argumentative Schwaechen" items={patterns.argumentativeWeaknesses} />
-                <ResultSection title="Ueberzeugende Formulierungen" items={patterns.convincingPhrases} />
+                <ResultSection title="Wiederkehrende Einwände" items={patterns.recurringObjections} />
+                <ResultSection title="Eigene argumentative Schwächen" items={patterns.argumentativeWeaknesses} />
+                <ResultSection title="Überzeugende Formulierungen" items={patterns.convincingPhrases} />
                 <ResultSection title="Unsichere Formulierungen" items={patterns.uncertainPhrases} />
                 <ResultSection title="Typische Konfliktmuster" items={patterns.conflictPatterns} />
-                <ResultSection title="Verbesserungsvorschlaege" items={patterns.improvements} />
+                <ResultSection title="Verbesserungsvorschläge" items={patterns.improvements} />
               </div>
             )}
           </section>

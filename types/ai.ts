@@ -1,4 +1,4 @@
-export type RiskLevel = "Gruen" | "Gelb" | "Rot";
+export type RiskLevel = "Grün" | "Gelb" | "Rot";
 
 export type MeetingPreparationInput = {
   title: string;
@@ -37,12 +37,17 @@ export type MeetingScenario = {
 };
 
 export type TranscriptAnalysisResult = {
+  summary: string;
   said: string[];
   unsaid: string[];
   avoidedTopics: string[];
   contradictions: string[];
+  decisions: string[];
+  tasks: string[];
+  openPoints: string[];
   openRisks: string[];
   followUpQuestions: string[];
+  followUpEmailDraft: string;
   timestamps: Array<{ time: string; note: string }>;
 };
 
