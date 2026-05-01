@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  ArrowUp,
   BarChart3,
   Brain,
   ClipboardCheck,
@@ -12,10 +11,13 @@ import {
   FileSearch,
   Gauge,
   MessageSquareText,
+  Pause,
   PlayCircle,
+  RotateCcw,
   Settings,
   ShieldQuestion,
   Sparkles,
+  Square,
   Upload,
   Users
 } from "lucide-react";
@@ -530,6 +532,7 @@ export default function Home() {
                         onClick={startRecording}
                         type="button"
                       >
+                        <PlayCircle size={15} aria-hidden="true" />
                         Start
                       </button>
                       <button
@@ -539,6 +542,7 @@ export default function Home() {
                         onClick={pauseRecording}
                         type="button"
                       >
+                        <Pause size={15} aria-hidden="true" />
                         Pause
                       </button>
                       <button
@@ -548,6 +552,7 @@ export default function Home() {
                         onClick={resumeRecording}
                         type="button"
                       >
+                        <RotateCcw size={15} aria-hidden="true" />
                         Fortfahren
                       </button>
                       <button
@@ -557,22 +562,24 @@ export default function Home() {
                         onClick={stopRecording}
                         type="button"
                       >
+                        <Square size={14} aria-hidden="true" />
                         Stop
                       </button>
                     </div>
                     <button
                       aria-label="Aufnahme transkribieren"
-                      className="recorder-icon-button recorder-icon-button--send"
+                      className="recorder-transcribe-button"
                       disabled={!audioBlob || recordingState === "recording" || loadingAction === "transcription"}
                       onClick={handleTranscription}
                       type="button"
                     >
-                      <ArrowUp size={24} aria-hidden="true" />
+                      <Sparkles size={16} aria-hidden="true" />
+                      Transkribieren
                     </button>
                   </div>
                   <p className="recorder-helper">
                     Start beginnt die Aufnahme. Pause unterbricht sie, Fortfahren setzt sie fort, Stop beendet sie.
-                    Der Pfeil transkribiert erst, wenn eine Aufnahme vorhanden ist.
+                    Transkribieren wird aktiv, sobald eine Aufnahme vorhanden ist.
                   </p>
                   <div className="recording-header">
                     <span className={`recording-status recording-status--${recordingState}`}>
