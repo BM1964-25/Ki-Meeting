@@ -295,6 +295,17 @@ type StoredAiSettings = {
 type MeetingSuggestionKey = "titles" | "projects" | "goals" | "participants" | "outcomes" | "criticalTopics" | "ownPositions" | "durations";
 type MeetingSuggestions = Record<MeetingSuggestionKey, string[]>;
 
+const meetingSuggestionLabels: Record<MeetingSuggestionKey, string> = {
+  titles: "Meeting-Titel",
+  projects: "Projekt / Mandat",
+  goals: "Ziele",
+  participants: "Teilnehmer und Rollen",
+  outcomes: "Gewünschte Ergebnisse",
+  criticalTopics: "Kritische Themen",
+  ownPositions: "Eigene Positionen",
+  durations: "Dauer"
+};
+
 type ExportKind = "management" | "actions" | "decision" | "full";
 type ActionPlanItem = TranscriptAnalysisResult["actionPlan"][number];
 type ActionPlanStatus = NonNullable<ActionPlanItem["status"]>;
@@ -333,6 +344,13 @@ const createEmptyMeetingSuggestions = (): MeetingSuggestions => ({
   ownPositions: [],
   durations: []
 });
+
+const normalizeSuggestionValues = (values: Array<string | undefined>) =>
+  values
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value && value.length >= 3))
+    .filter((value, index, list) => list.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index)
+    .slice(0, 12);
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -395,7 +413,7 @@ function loadMeetingSuggestionsFromStorage(): MeetingSuggestions {
     return Object.fromEntries(
       Object.keys(emptySuggestions).map((key) => {
         const suggestionKey = key as MeetingSuggestionKey;
-        return [suggestionKey, Array.isArray(parsedSuggestions[suggestionKey]) ? parsedSuggestions[suggestionKey]!.filter(Boolean).slice(0, 12) : []];
+        return [suggestionKey, Array.isArray(parsedSuggestions[suggestionKey]) ? normalizeSuggestionValues(parsedSuggestions[suggestionKey]!) : []];
       })
     ) as MeetingSuggestions;
   } catch {
@@ -617,7 +635,7 @@ export default function Home() {
   const [archiveStatus, setArchiveStatus] = useState("Noch keine Projektakte gespeichert oder geladen.");
   const [loadedArchiveNames, setLoadedArchiveNames] = useState<string[]>([]);
   const [savedArchives, setSavedArchives] = useState<MeetingArchive[]>(loadSavedArchivesFromStorage);
-  const [currentArchiveId, setCurrentArchiveId] = useState(() => `meeting-${Date.now()}`);
+  const [currentArchiveId, setCurrentArchiveId] = useState("meeting-entwurf");
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
@@ -829,9 +847,7 @@ export default function Home() {
       const nextSuggestions = { ...currentSuggestions };
 
       (Object.entries(values) as Array<[MeetingSuggestionKey, string | string[] | undefined]>).forEach(([key, rawValue]) => {
-        const valuesToStore = (Array.isArray(rawValue) ? rawValue : [rawValue])
-          .map((value) => value?.trim())
-          .filter((value): value is string => Boolean(value && value.length >= 3));
+        const valuesToStore = normalizeSuggestionValues(Array.isArray(rawValue) ? rawValue : [rawValue]);
 
         if (valuesToStore.length === 0) {
           return;
@@ -855,6 +871,31 @@ export default function Home() {
     };
     persistMeetingSuggestions(nextSuggestions);
   }, [meetingSuggestions, persistMeetingSuggestions]);
+  const updateMeetingSuggestion = useCallback((key: MeetingSuggestionKey, oldValue: string, newValue: string) => {
+    const trimmedValue = newValue.trim();
+    if (trimmedValue.length < 3) {
+      deleteMeetingSuggestion(key, oldValue);
+      return;
+    }
+
+    const nextValues = meetingSuggestions[key]
+      .map((item) => (item === oldValue ? trimmedValue : item))
+      .filter((item, index, values) => values.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index)
+      .slice(0, 12);
+
+    persistMeetingSuggestions({
+      ...meetingSuggestions,
+      [key]: nextValues
+    });
+  }, [deleteMeetingSuggestion, meetingSuggestions, persistMeetingSuggestions]);
+  const resetMeetingSuggestions = useCallback(() => {
+    persistMeetingSuggestions(createEmptyMeetingSuggestions());
+    setAiSettingsStatus("Gespeicherte Vorschläge wurden lokal zurückgesetzt.");
+  }, [persistMeetingSuggestions]);
+  const meetingSuggestionTotal = useMemo(
+    () => Object.values(meetingSuggestions).reduce((total, values) => total + values.length, 0),
+    [meetingSuggestions]
+  );
   const rememberCurrentMeetingSuggestions = useCallback(() => {
     rememberMeetingSuggestionValues({
       titles: [meetingStartDraft.title, meetingMetadata.title, agendaInput.title, preparationInput.title],
@@ -1507,7 +1548,7 @@ export default function Home() {
     ];
   }
 
-  function createCurrentMeetingArchive(): MeetingArchive {
+  function createCurrentMeetingArchive(archiveId = currentArchiveId): MeetingArchive {
     const hasAnalysis = Boolean(transcript || agenda || preparation || decision || simulation || stakeholder || patterns);
     const status: MeetingArchive["metadata"]["status"] = transcript
       ? "analysiert"
@@ -1523,7 +1564,7 @@ export default function Home() {
 
     return {
       schemaVersion: 1,
-      id: currentArchiveId,
+      id: archiveId,
       savedAt,
       appVersion: "Meeting Intelligence KI Arbeitsversion",
       metadata: {
@@ -1678,11 +1719,15 @@ export default function Home() {
   }
 
   function saveCurrentMeetingInBrowser() {
-    storeArchiveInBrowser(createCurrentMeetingArchive());
+    const archiveId = currentArchiveId === "meeting-entwurf" ? `meeting-${Date.now()}` : currentArchiveId;
+    setCurrentArchiveId(archiveId);
+    storeArchiveInBrowser(createCurrentMeetingArchive(archiveId));
   }
 
   function saveAndDownloadCurrentMeetingArchive() {
-    const archive = createCurrentMeetingArchive();
+    const archiveId = currentArchiveId === "meeting-entwurf" ? `meeting-${Date.now()}` : currentArchiveId;
+    setCurrentArchiveId(archiveId);
+    const archive = createCurrentMeetingArchive(archiveId);
     storeArchiveInBrowser(archive);
     downloadArchive(archive);
   }
@@ -4324,6 +4369,54 @@ export default function Home() {
                   <p className="connection-error">{anthropicStatusText}</p>
                 )}
                 <p className="settings-note">{aiSettingsStatus}</p>
+              </div>
+              <div className="settings-masterdata-panel">
+                <div className="settings-masterdata-panel__header">
+                  <div>
+                    <h3>Gespeicherte Vorschläge</h3>
+                    <p>
+                      Häufig verwendete Meeting-Daten werden lokal im Browser gemerkt. Sie können hier
+                      bearbeitet, gelöscht oder vollständig zurückgesetzt werden.
+                    </p>
+                  </div>
+                  <button className="secondary-button" disabled={meetingSuggestionTotal === 0} onClick={resetMeetingSuggestions} type="button">
+                    <RotateCcw size={16} /> Vorschläge zurücksetzen
+                  </button>
+                </div>
+                {meetingSuggestionTotal === 0 ? (
+                  <p className="empty-state">Noch keine Vorschläge gespeichert. Sie entstehen automatisch, sobald Meeting-Daten verwendet oder Akten gespeichert werden.</p>
+                ) : (
+                  <div className="suggestion-admin-grid">
+                    {(Object.entries(meetingSuggestionLabels) as Array<[MeetingSuggestionKey, string]>).map(([key, label]) => (
+                      <section className="suggestion-admin-group" key={key}>
+                        <div className="suggestion-admin-group__title">
+                          <span>{label}</span>
+                          <small>{meetingSuggestions[key].length}</small>
+                        </div>
+                        {meetingSuggestions[key].length === 0 ? (
+                          <p>Keine Einträge</p>
+                        ) : (
+                          <div className="suggestion-admin-list">
+                            {meetingSuggestions[key].map((suggestion) => (
+                              <div className="suggestion-admin-item" key={suggestion}>
+                                <input
+                                  defaultValue={suggestion}
+                                  onBlur={(event) => updateMeetingSuggestion(key, suggestion, event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.currentTarget.blur();
+                                    }
+                                  }}
+                                />
+                                <button aria-label={`${suggestion} löschen`} onClick={() => deleteMeetingSuggestion(key, suggestion)} type="button">Löschen</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="setting-row">
                 <span>Datenschutzmodus</span>
