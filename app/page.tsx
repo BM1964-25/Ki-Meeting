@@ -94,6 +94,7 @@ const initialPreparation: MeetingPreparationInput = {
 
 const WAVEFORM_BAR_COUNT = 86;
 const FLAT_WAVEFORM_HEIGHT = 4;
+const WAVEFORM_FRAME_SKIP = 3;
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -193,6 +194,7 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const waveformFrameRef = useRef(0);
   const startedAtRef = useRef<number | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [preparationInput, setPreparationInput] = useState(initialPreparation);
@@ -304,6 +306,7 @@ export default function Home() {
     audioContextRef.current?.close();
     audioContextRef.current = null;
     analyserRef.current = null;
+    waveformFrameRef.current = 0;
     setAudioLevel(0);
     setIsSpeaking(false);
     setWaveformBars(createSilentWaveform());
@@ -333,26 +336,17 @@ export default function Home() {
 
       setAudioLevel(level);
       const isVoiceActive = level > 8;
-      const chunkSize = Math.max(1, Math.floor(data.length / WAVEFORM_BAR_COUNT));
-      const nextBars = isVoiceActive
-        ? Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
-            const start = index * chunkSize;
-            const end = Math.min(data.length, start + chunkSize);
-            let chunkSum = 0;
-
-            for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-              chunkSum += Math.abs(data[sampleIndex] - 128) / 128;
-            }
-
-            const average = chunkSum / Math.max(1, end - start);
-            const rawHeight = 4 + average * 86;
-
-            return Math.max(FLAT_WAVEFORM_HEIGHT, Math.min(42, Math.round(rawHeight)));
-          })
-        : createSilentWaveform();
-
-      setWaveformBars(nextBars);
       setIsSpeaking(isVoiceActive);
+      waveformFrameRef.current += 1;
+
+      if (waveformFrameRef.current % WAVEFORM_FRAME_SKIP === 0) {
+        const nextHeight = isVoiceActive
+          ? Math.max(12, Math.min(42, Math.round(10 + level * 0.42)))
+          : FLAT_WAVEFORM_HEIGHT;
+
+        setWaveformBars((previousBars) => [...previousBars.slice(1), nextHeight]);
+      }
+
       animationFrameRef.current = requestAnimationFrame(updateMeter);
     };
 
@@ -651,7 +645,7 @@ export default function Home() {
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
                       {waveformBars.map((height, index) => (
                         <span
-                          className={recordingState === "recording" && isSpeaking ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
+                          className={height > FLAT_WAVEFORM_HEIGHT ? "recorder-waveform__bar recorder-waveform__bar--live" : "recorder-waveform__bar"}
                           key={index}
                           style={{ height: `${height}px` }}
                         />

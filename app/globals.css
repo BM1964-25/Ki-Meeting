@@ -441,8 +441,15 @@ h3 {
 }
 
 .recorder-waveform::before {
-  border-top: 1px solid #cfd6df;
+  background-image: repeating-linear-gradient(
+    to right,
+    #b7c0cc 0,
+    #b7c0cc 3px,
+    transparent 3px,
+    transparent 8px
+  );
   content: "";
+  height: 2px;
   left: 0;
   position: absolute;
   right: 0;
@@ -451,7 +458,7 @@ h3 {
 }
 
 .recorder-waveform__bar {
-  background: #232933;
+  background: #171c24;
   border-radius: 999px;
   display: inline-block;
   flex: 0 0 2px;
@@ -463,8 +470,8 @@ h3 {
 }
 
 .recorder-waveform__bar--live {
-  background: #125f75;
-  box-shadow: 0 0 6px rgba(18, 95, 117, 0.12);
+  background: #171c24;
+  box-shadow: none;
   opacity: 1;
 }
 
