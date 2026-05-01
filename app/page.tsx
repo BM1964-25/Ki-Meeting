@@ -189,6 +189,7 @@ type StoredAiSettings = {
 
 type ExportKind = "management" | "actions" | "decision" | "full";
 type ActionPlanItem = TranscriptAnalysisResult["actionPlan"][number];
+type ActionPlanStatus = NonNullable<ActionPlanItem["status"]>;
 
 const createInitialMeetingMetadata = (): MeetingMetadataForm => ({
   title: "Neue Meeting-Akte",
@@ -369,6 +370,10 @@ export default function Home() {
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveProjectFilter, setArchiveProjectFilter] = useState("alle");
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<MeetingStatus | "alle">("alle");
+  const [actionSearch, setActionSearch] = useState("");
+  const [actionProjectFilter, setActionProjectFilter] = useState("alle");
+  const [actionStatusFilter, setActionStatusFilter] = useState<ActionPlanStatus | "alle">("alle");
+  const [actionPriorityFilter, setActionPriorityFilter] = useState<ActionPlanItem["priority"] | "alle">("alle");
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [fileSystemDirectoryHandle, setFileSystemDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [fileSystemStatus, setFileSystemStatus] = useState("Noch kein lokaler Ordner verbunden.");
@@ -463,6 +468,46 @@ export default function Home() {
       return statusMatches && projectMatches && queryMatches;
     });
   }, [archiveProjectFilter, archiveSearch, archiveStatusFilter, savedArchives]);
+  const allArchiveActions = useMemo(() => savedArchives.flatMap((archive) => (
+    archive.transcriptAnalysis?.actionPlan.map((action, index) => ({
+      ...action,
+      status: action.status ?? "Offen" as ActionPlanStatus,
+      archiveId: archive.id,
+      archiveTitle: archive.metadata.title,
+      archiveDate: archive.metadata.date,
+      project: archive.metadata.project?.trim() || "ohne Projekt",
+      index
+    })) ?? []
+  )), [savedArchives]);
+  const filteredArchiveActions = useMemo(() => {
+    const query = actionSearch.trim().toLowerCase();
+
+    return allArchiveActions.filter((action) => {
+      const projectMatches = actionProjectFilter === "alle" || action.project === actionProjectFilter;
+      const statusMatches = actionStatusFilter === "alle" || action.status === actionStatusFilter;
+      const priorityMatches = actionPriorityFilter === "alle" || action.priority === actionPriorityFilter;
+      const queryText = [
+        action.task,
+        action.owner,
+        action.due,
+        action.priority,
+        action.status,
+        action.risk,
+        action.archiveTitle,
+        action.project
+      ].join(" ").toLowerCase();
+      const queryMatches = !query || queryText.includes(query);
+
+      return projectMatches && statusMatches && priorityMatches && queryMatches;
+    });
+  }, [actionPriorityFilter, actionProjectFilter, actionSearch, actionStatusFilter, allArchiveActions]);
+  const actionSummary = useMemo(() => ({
+    total: allArchiveActions.length,
+    open: allArchiveActions.filter((action) => action.status === "Offen").length,
+    inProgress: allArchiveActions.filter((action) => action.status === "In Arbeit").length,
+    blocked: allArchiveActions.filter((action) => action.status === "Blockiert").length,
+    done: allArchiveActions.filter((action) => action.status === "Erledigt").length
+  }), [allArchiveActions]);
   const selectedArchive = useMemo(() => {
     if (!selectedArchiveId) {
       return filteredArchives[0] ?? savedArchives[0] ?? null;
@@ -2030,6 +2075,96 @@ export default function Home() {
                 <span>{filteredArchives.length} von {savedArchives.length} Akten sichtbar</span>
                 <span>{archiveProjects.length} Projekte</span>
                 <span>{currentArchiveId ? "Wiederherstellung aktiv" : "keine Akte geladen"}</span>
+              </div>
+            </section>
+            <section className="cross-action-panel">
+              <div className="cross-action-panel__header">
+                <div>
+                  <h2>Maßnahmen über alle Projektakten</h2>
+                  <p className="lead">
+                    Zentrales Register für offene, laufende, blockierte und erledigte Maßnahmen aus allen gespeicherten Meeting-Akten.
+                  </p>
+                </div>
+                <div className="cross-action-summary">
+                  <span>{actionSummary.total} gesamt</span>
+                  <span>{actionSummary.open} offen</span>
+                  <span>{actionSummary.inProgress} in Arbeit</span>
+                  <span>{actionSummary.blocked} blockiert</span>
+                  <span>{actionSummary.done} erledigt</span>
+                </div>
+              </div>
+              <div className="action-library-controls">
+                <Field label="Maßnahmensuche">
+                  <input placeholder="Maßnahme, Owner, Risiko, Akte ..." value={actionSearch} onChange={(event) => setActionSearch(event.target.value)} />
+                </Field>
+                <Field label="Projekt">
+                  <select value={actionProjectFilter} onChange={(event) => setActionProjectFilter(event.target.value)}>
+                    <option value="alle">alle Projekte</option>
+                    {archiveProjects.map((project) => (
+                      <option key={project} value={project}>{project}</option>
+                    ))}
+                    {allArchiveActions.some((action) => action.project === "ohne Projekt") && <option value="ohne Projekt">ohne Projekt</option>}
+                  </select>
+                </Field>
+                <Field label="Status">
+                  <select value={actionStatusFilter} onChange={(event) => setActionStatusFilter(event.target.value as ActionPlanStatus | "alle")}>
+                    <option value="alle">alle Status</option>
+                    <option value="Offen">Offen</option>
+                    <option value="In Arbeit">In Arbeit</option>
+                    <option value="Erledigt">Erledigt</option>
+                    <option value="Blockiert">Blockiert</option>
+                  </select>
+                </Field>
+                <Field label="Priorität">
+                  <select value={actionPriorityFilter} onChange={(event) => setActionPriorityFilter(event.target.value as ActionPlanItem["priority"] | "alle")}>
+                    <option value="alle">alle Prioritäten</option>
+                    <option value="Hoch">Hoch</option>
+                    <option value="Mittel">Mittel</option>
+                    <option value="Niedrig">Niedrig</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="cross-action-table">
+                {filteredArchiveActions.map((action) => (
+                  <article className={`cross-action-row cross-action-row--${action.status.toLowerCase().replaceAll(" ", "-")}`} key={`${action.archiveId}-${action.index}-${action.task}`}>
+                    <div>
+                      <strong>{action.task}</strong>
+                      <span>{action.risk}</span>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Projekt</dt>
+                        <dd>{action.project}</dd>
+                      </div>
+                      <div>
+                        <dt>Akte</dt>
+                        <dd>{action.archiveTitle}</dd>
+                      </div>
+                      <div>
+                        <dt>Owner</dt>
+                        <dd>{action.owner}</dd>
+                      </div>
+                      <div>
+                        <dt>Frist</dt>
+                        <dd>{action.due}</dd>
+                      </div>
+                      <div>
+                        <dt>Priorität</dt>
+                        <dd>{action.priority}</dd>
+                      </div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>{action.status}</dd>
+                      </div>
+                    </dl>
+                    <button className="secondary-button" onClick={() => setSelectedArchiveId(action.archiveId)} type="button">
+                      <Eye size={16} /> Akte anzeigen
+                    </button>
+                  </article>
+                ))}
+                {filteredArchiveActions.length === 0 && (
+                  <p className="result-note">Keine Maßnahmen passen zu den aktuellen Filtern.</p>
+                )}
               </div>
             </section>
             <div className="analysis-lane">

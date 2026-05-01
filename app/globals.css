@@ -705,6 +705,110 @@ h3 {
   padding: 7px 10px;
 }
 
+.cross-action-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.cross-action-panel__header {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cross-action-panel__header h2 {
+  margin-bottom: 8px;
+}
+
+.cross-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 520px;
+}
+
+.cross-action-summary span {
+  background: #f4f8fa;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.action-library-controls {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1.3fr) repeat(3, minmax(160px, 0.7fr));
+}
+
+.cross-action-table {
+  display: grid;
+  gap: 10px;
+}
+
+.cross-action-row {
+  align-items: start;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 1fr) auto;
+  padding: 14px;
+}
+
+.cross-action-row--blockiert {
+  border-color: #efc2bd;
+}
+
+.cross-action-row--erledigt {
+  background: #f3f8f5;
+  border-color: #b7dfc8;
+}
+
+.cross-action-row--in-arbeit {
+  border-color: #efd391;
+}
+
+.cross-action-row strong,
+.cross-action-row span {
+  display: block;
+}
+
+.cross-action-row span {
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.cross-action-row dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.cross-action-row dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.cross-action-row dd {
+  font-weight: 800;
+  margin: 0;
+}
+
 .archive-table {
   display: grid;
   gap: 10px;
@@ -2227,10 +2331,13 @@ h3 {
   .grid--two,
   .form-grid,
   .result-grid,
+  .action-library-controls,
   .meeting-file-form,
   .archive-detail-grid,
   .archive-detail-metrics,
   .archive-detail-panel__header,
+  .cross-action-panel__header,
+  .cross-action-row,
   .archive-intro,
   .archive-grid,
   .archive-row,
@@ -2311,6 +2418,10 @@ h3 {
   }
 
   .measure-row dl {
+    grid-template-columns: 1fr;
+  }
+
+  .cross-action-row dl {
     grid-template-columns: 1fr;
   }
 
