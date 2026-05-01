@@ -226,6 +226,7 @@ export default function Home() {
   const [preparation, setPreparation] = useState<MeetingPreparationResult | null>(null);
   const [agendaInput, setAgendaInput] = useState(initialAgenda);
   const [agenda, setAgenda] = useState<AgendaResult | null>(null);
+  const [agendaFileStatus, setAgendaFileStatus] = useState("Noch keine Agenda-Datei geladen.");
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
   const [simulationInput, setSimulationInput] = useState({ goal: "", participants: "", conflicts: "" });
@@ -569,6 +570,33 @@ export default function Home() {
     } finally {
       setLoadingAction(null);
     }
+  }
+
+  function handleAgendaFileUpload(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    const isTextFile = file.type.startsWith("text/") || /\.(txt|md|markdown)$/i.test(file.name);
+
+    if (!isTextFile) {
+      setAgendaFileStatus("Diese Datei kann noch nicht direkt gelesen werden. Bitte nutze aktuell .txt oder .md oder kopiere den Agenda-Text in das Feld.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      setAgendaInput((currentInput) => ({
+        ...currentInput,
+        existingAgenda: text
+      }));
+      setAgendaFileStatus(`Agenda-Datei übernommen: ${file.name}`);
+    };
+    reader.onerror = () => {
+      setAgendaFileStatus("Die Agenda-Datei konnte nicht gelesen werden. Bitte kopiere den Inhalt manuell in das Feld.");
+    };
+    reader.readAsText(file);
   }
 
   async function handleDecision(event: FormEvent) {
@@ -1068,9 +1096,19 @@ export default function Home() {
               <Field label="Neue Agenda-Idee">
                 <textarea placeholder="Agenda-Punkte grob skizzieren, falls noch keine fertige Agenda existiert." value={agendaInput.agendaText} onChange={(event) => setAgendaInput({ ...agendaInput, agendaText: event.target.value })} />
               </Field>
-              <Field label="Bestehende Agenda">
-                <textarea placeholder="Bestehende Agenda hier einfügen." value={agendaInput.existingAgenda} onChange={(event) => setAgendaInput({ ...agendaInput, existingAgenda: event.target.value })} />
-              </Field>
+              <div className="field agenda-upload-field">
+                <span>Bestehende Agenda</span>
+                <textarea placeholder="Bestehende Agenda hier einfügen oder eine Text-/Markdown-Datei hochladen." value={agendaInput.existingAgenda} onChange={(event) => setAgendaInput({ ...agendaInput, existingAgenda: event.target.value })} />
+                <div className="agenda-file-actions">
+                  <label className="secondary-button agenda-file-upload">
+                    <Upload size={17} aria-hidden="true" />
+                    Agenda-Datei hochladen
+                    <input accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={(event) => handleAgendaFileUpload(event.target.files?.[0] ?? null)} type="file" />
+                  </label>
+                  <p>{agendaFileStatus}</p>
+                </div>
+                <p className="field-help">Aktuell direkt lesbar: .txt und .md. Word- und PDF-Dateien folgen als eigener Ausbauschritt.</p>
+              </div>
               <Field label="Transkript oder Ergebnisnotizen für späteren Abgleich">
                 <textarea placeholder="Nach dem Meeting Transkript, Rohnotizen oder Ergebnisprotokoll einfügen." value={agendaInput.comparisonText} onChange={(event) => setAgendaInput({ ...agendaInput, comparisonText: event.target.value })} />
               </Field>
