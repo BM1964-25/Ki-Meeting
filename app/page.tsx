@@ -10,6 +10,7 @@ import {
   Mic,
   FileSearch,
   Gauge,
+  ListChecks,
   MessageSquareText,
   Pause,
   PlayCircle,
@@ -18,6 +19,7 @@ import {
   ShieldQuestion,
   Sparkles,
   Square,
+  Send,
   Upload,
   Users
 } from "lucide-react";
@@ -31,12 +33,15 @@ import {
   analyzeMeetingPatterns,
   analyzeStakeholder,
   analyzeTranscript,
+  generateAgendaWorkflow,
   generateDecisionChallenge,
   generateMeetingPreparation,
   generateMeetingSimulation,
   transcribeMeetingAudio
 } from "@/lib/aiService";
 import {
+  AgendaInput,
+  AgendaResult,
   DecisionChallengeResult,
   MeetingPatternsResult,
   MeetingPreparationInput,
@@ -62,6 +67,7 @@ type MicrophoneDiagnostics = {
 type AreaId =
   | "dashboard"
   | "record"
+  | "agenda"
   | "prepare"
   | "decision"
   | "simulate"
@@ -73,6 +79,7 @@ type AreaId =
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Gauge },
   { id: "record", label: "Audio & Transkription", icon: Mic },
+  { id: "agenda", label: "Agenda planen", icon: ListChecks },
   { id: "prepare", label: "Meeting vorbereiten", icon: ClipboardCheck },
   { id: "decision", label: "Entscheidung prüfen", icon: ShieldQuestion },
   { id: "simulate", label: "Meeting simulieren", icon: PlayCircle },
@@ -90,6 +97,17 @@ const initialPreparation: MeetingPreparationInput = {
   desiredOutcome: "",
   criticalTopics: "",
   ownPosition: ""
+};
+
+const initialAgenda: AgendaInput = {
+  title: "",
+  meetingGoal: "",
+  participants: "",
+  duration: "",
+  desiredOutcome: "",
+  agendaText: "",
+  existingAgenda: "",
+  comparisonText: ""
 };
 
 const WAVEFORM_BAR_COUNT = 86;
@@ -188,6 +206,7 @@ export default function Home() {
   const [loadingAction, setLoadingAction] = useState<
     | null
     | "preparation"
+    | "agenda"
     | "decision"
     | "simulation"
     | "transcript"
@@ -205,6 +224,8 @@ export default function Home() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [preparationInput, setPreparationInput] = useState(initialPreparation);
   const [preparation, setPreparation] = useState<MeetingPreparationResult | null>(null);
+  const [agendaInput, setAgendaInput] = useState(initialAgenda);
+  const [agenda, setAgenda] = useState<AgendaResult | null>(null);
   const [decisionText, setDecisionText] = useState("");
   const [decision, setDecision] = useState<DecisionChallengeResult | null>(null);
   const [simulationInput, setSimulationInput] = useState({ goal: "", participants: "", conflicts: "" });
@@ -225,12 +246,12 @@ export default function Home() {
 
   const dashboardStats = useMemo(
     () => ({
-      preparedMeetings: preparation ? "1" : "0",
+      preparedMeetings: String((preparation ? 1 : 0) + (agenda ? 1 : 0)),
       analyzedTranscripts: transcript ? "1" : "0",
       criticalQuestions: preparation ? String(preparation.criticalQuestions.length) : "0",
       recurringObjections: patterns ? String(patterns.recurringObjections.length) : "0"
     }),
-    [patterns, preparation, transcript]
+    [agenda, patterns, preparation, transcript]
   );
 
   const pageTitle = navItems.find((item) => item.id === activeArea)?.label ?? "Dashboard";
@@ -535,6 +556,16 @@ export default function Home() {
     setLoadingAction("preparation");
     try {
       setPreparation(await generateMeetingPreparation(preparationInput));
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleAgenda(event: FormEvent) {
+    event.preventDefault();
+    setLoadingAction("agenda");
+    try {
+      setAgenda(await generateAgendaWorkflow(agendaInput));
     } finally {
       setLoadingAction(null);
     }
@@ -994,6 +1025,124 @@ export default function Home() {
                 </section>
               </div>
             </section>
+          </section>
+        )}
+
+        {activeArea === "agenda" && (
+          <section className="section">
+            <PrivacyNotice />
+            <div className="agenda-intro">
+              <article className="card">
+                <h2>Agenda als Meeting-Anker</h2>
+                <p className="lead">
+                  Lege eine neue Agenda an oder füge eine bestehende Agenda ein. Die App prüft Struktur,
+                  Entscheidungsreife und Risiken und kann später den tatsächlichen Meeting-Verlauf dagegen abgleichen.
+                </p>
+              </article>
+              <article className="card agenda-flow-card">
+                <h2>Workflow</h2>
+                <ol>
+                  <li>Agenda entwerfen oder bestehende Agenda einpflegen.</li>
+                  <li>Vorbereitung, kritische Fragen und Risikosignale erzeugen.</li>
+                  <li>Nach dem Meeting Transkript oder Notizen einfügen und mit der Agenda abgleichen.</li>
+                </ol>
+              </article>
+            </div>
+
+            <form className="card form-grid" onSubmit={handleAgenda}>
+              <Field label="Meeting-Titel">
+                <input value={agendaInput.title} onChange={(event) => setAgendaInput({ ...agendaInput, title: event.target.value })} />
+              </Field>
+              <Field label="Dauer">
+                <input placeholder="z. B. 60 Minuten" value={agendaInput.duration} onChange={(event) => setAgendaInput({ ...agendaInput, duration: event.target.value })} />
+              </Field>
+              <Field label="Ziel des Meetings">
+                <textarea value={agendaInput.meetingGoal} onChange={(event) => setAgendaInput({ ...agendaInput, meetingGoal: event.target.value })} />
+              </Field>
+              <Field label="Gewünschtes Ergebnis">
+                <textarea value={agendaInput.desiredOutcome} onChange={(event) => setAgendaInput({ ...agendaInput, desiredOutcome: event.target.value })} />
+              </Field>
+              <Field label="Teilnehmer und Rollen">
+                <textarea value={agendaInput.participants} onChange={(event) => setAgendaInput({ ...agendaInput, participants: event.target.value })} />
+              </Field>
+              <Field label="Neue Agenda-Idee">
+                <textarea placeholder="Agenda-Punkte grob skizzieren, falls noch keine fertige Agenda existiert." value={agendaInput.agendaText} onChange={(event) => setAgendaInput({ ...agendaInput, agendaText: event.target.value })} />
+              </Field>
+              <Field label="Bestehende Agenda">
+                <textarea placeholder="Bestehende Agenda hier einfügen." value={agendaInput.existingAgenda} onChange={(event) => setAgendaInput({ ...agendaInput, existingAgenda: event.target.value })} />
+              </Field>
+              <Field label="Transkript oder Ergebnisnotizen für späteren Abgleich">
+                <textarea placeholder="Nach dem Meeting Transkript, Rohnotizen oder Ergebnisprotokoll einfügen." value={agendaInput.comparisonText} onChange={(event) => setAgendaInput({ ...agendaInput, comparisonText: event.target.value })} />
+              </Field>
+              <div className="form-actions agenda-actions">
+                <button className="primary-button" type="submit"><ListChecks size={17} /> Agenda prüfen</button>
+                <button
+                  className="secondary-button"
+                  disabled={!transcriptText}
+                  onClick={() => setAgendaInput({ ...agendaInput, comparisonText: transcriptText })}
+                  type="button"
+                >
+                  <FileSearch size={17} /> Aktuelles Transkript übernehmen
+                </button>
+              </div>
+            </form>
+
+            {loadingAction === "agenda" && <LoadingIndicator label="KI prüft Agenda und Abgleich ..." />}
+            {agenda && (
+              <>
+                <div className="analysis-lane">
+                  <h2>Strukturierte Agenda</h2>
+                  <div className="agenda-table">
+                    {agenda.refinedAgenda.map((item) => (
+                      <article className="agenda-item" key={`${item.topic}-${item.owner}`}>
+                        <div>
+                          <h3>{item.topic}</h3>
+                          <p>{item.goal}</p>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Owner</dt>
+                            <dd>{item.owner}</dd>
+                          </div>
+                          <div>
+                            <dt>Zeit</dt>
+                            <dd>{item.timeBudget}</dd>
+                          </div>
+                          <div>
+                            <dt>Erwartetes Ergebnis</dt>
+                            <dd>{item.expectedDecision}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="result-grid">
+                  <ResultSection title="Qualitätsprüfung" items={agenda.qualityChecks} />
+                  <ResultSection title="Vorbereitungsfragen" items={agenda.preparationQuestions} />
+                  <ResultSection title="Risikosignale" items={agenda.riskSignals} />
+                  <section className="result-block">
+                    <h3>Sendefähiger Agenda-Entwurf</h3>
+                    <pre className="mail-draft">{agenda.sendableAgendaDraft}</pre>
+                    <button className="secondary-button" type="button">
+                      <Send size={17} /> Versand später anbinden
+                    </button>
+                  </section>
+                </div>
+
+                <div className="analysis-lane">
+                  <h2>Agenda-Abgleich nach dem Meeting</h2>
+                  <div className="result-grid">
+                    <ResultSection title="Behandelte Punkte" items={agenda.comparison.covered} />
+                    <ResultSection title="Übersprungene Punkte" items={agenda.comparison.skipped} />
+                    <ResultSection title="Neu entstandene Themen" items={agenda.comparison.newTopics} />
+                    <ResultSection title="Entscheidungen je Agenda-Punkt" items={agenda.comparison.decisions} />
+                    <ResultSection title="Follow-up" items={agenda.comparison.followUps} />
+                  </div>
+                </div>
+              </>
+            )}
           </section>
         )}
 

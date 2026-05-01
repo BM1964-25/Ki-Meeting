@@ -17,6 +17,38 @@ export type MeetingPreparationResult = {
   responseStrategies: string[];
 };
 
+export type AgendaInput = {
+  title: string;
+  meetingGoal: string;
+  participants: string;
+  duration: string;
+  desiredOutcome: string;
+  agendaText: string;
+  existingAgenda: string;
+  comparisonText: string;
+};
+
+export type AgendaResult = {
+  refinedAgenda: Array<{
+    topic: string;
+    goal: string;
+    owner: string;
+    timeBudget: string;
+    expectedDecision: string;
+  }>;
+  qualityChecks: string[];
+  preparationQuestions: string[];
+  riskSignals: string[];
+  sendableAgendaDraft: string;
+  comparison: {
+    covered: string[];
+    skipped: string[];
+    newTopics: string[];
+    decisions: string[];
+    followUps: string[];
+  };
+};
+
 export type DecisionChallengeResult = {
   weaknesses: string[];
   uncomfortableQuestions: string[];

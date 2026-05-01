@@ -1,4 +1,6 @@
 import {
+  AgendaInput,
+  AgendaResult,
   DecisionChallengeResult,
   MeetingPatternsResult,
   MeetingPreparationInput,
@@ -37,6 +39,96 @@ export async function generateMeetingPreparation(
       "Bei Widerstand zwischen Sachrisiko, Interessenkonflikt und Timing-Problem unterscheiden.",
       "Am Ende eine klare Commit-Frage stellen: Zustimmung, Bedenken oder definierter Nacharbeitsauftrag."
     ]
+  };
+}
+
+export async function generateAgendaWorkflow(input: AgendaInput): Promise<AgendaResult> {
+  await delay();
+
+  const title = input.title || "Strategisches Abstimmungsmeeting";
+  const goal = input.meetingGoal || "Entscheidungslage klären und nächste Schritte verbindlich festlegen";
+  const duration = input.duration || "60 Minuten";
+  const desiredOutcome = input.desiredOutcome || "klare Entscheidung oder belastbarer Follow-up-Auftrag";
+
+  return {
+    refinedAgenda: [
+      {
+        topic: "Zielbild und Entscheidungsfrage schärfen",
+        goal: `Gemeinsames Verständnis herstellen: ${goal}.`,
+        owner: "Meeting-Owner",
+        timeBudget: "10 Min.",
+        expectedDecision: "Entscheidungsfrage ist von allen Teilnehmenden akzeptiert."
+      },
+      {
+        topic: "Ausgangslage, Datenbasis und offene Annahmen",
+        goal: "Fakten, Annahmen und Unsicherheiten sichtbar voneinander trennen.",
+        owner: "Fachbereich / Controlling",
+        timeBudget: "15 Min.",
+        expectedDecision: "Offene Annahmen sind priorisiert und mit Owner versehen."
+      },
+      {
+        topic: "Risiken, Einwände und Alternativen",
+        goal: "Kritische Punkte früh behandeln, bevor die Runde in Detaildiskussionen abgleitet.",
+        owner: "Projektleitung",
+        timeBudget: "15 Min.",
+        expectedDecision: "Akzeptierte Risiken und noch zu reduzierende Risiken sind getrennt."
+      },
+      {
+        topic: "Entscheidung, Maßnahmen und Follow-up",
+        goal: `Das gewünschte Ergebnis absichern: ${desiredOutcome}.`,
+        owner: "Entscheiderkreis",
+        timeBudget: "15 Min.",
+        expectedDecision: "Entscheidung, Verantwortliche und Termin sind festgehalten."
+      },
+      {
+        topic: "Abschluss und Kommunikationslinie",
+        goal: "Einheitliche Ergebnisformulierung für alle Beteiligten vereinbaren.",
+        owner: "Meeting-Owner",
+        timeBudget: "5 Min.",
+        expectedDecision: "Follow-up-Mail und nächste Kommunikation sind abgestimmt."
+      }
+    ],
+    qualityChecks: [
+      `Die Agenda ist für ${duration} realistisch, wenn die Entscheidungsfrage zu Beginn klar eingegrenzt wird.`,
+      "Jeder Agenda-Punkt sollte mit einem konkreten Ergebnis enden, nicht nur mit Diskussion.",
+      "Kritische Risiken sollten vor der Entscheidung behandelt werden, nicht erst im Abschluss.",
+      "Teilnehmerrollen und Entscheidungsrechte sollten vor Versand der Agenda sichtbar gemacht werden."
+    ],
+    preparationQuestions: [
+      "Welche Entscheidung muss am Ende ausdrücklich getroffen oder vertagt werden?",
+      "Welche Information würde die Empfehlung noch verändern?",
+      "Wer könnte die Agenda als zu früh, zu eng oder zu offen kritisieren?",
+      "Welche Einwände sollten aktiv eingeladen werden, damit sie später nicht verdeckt blockieren?"
+    ],
+    riskSignals: [
+      "Agenda-Punkte ohne Owner führen wahrscheinlich zu unverbindlicher Diskussion.",
+      "Wenn Budget, Ressourcen oder Prioritäten erst am Ende auftauchen, steigt das Vertagungsrisiko.",
+      "Eine bestehende Agenda ohne Entscheidungsfrage kann später nur schwer gegen Ergebnisse abgeglichen werden."
+    ],
+    sendableAgendaDraft:
+      `Betreff: Agenda ${title}\n\nHallo zusammen,\n\nfür unser Meeting schlage ich folgende Agenda vor. Ziel ist: ${goal}. Das gewünschte Ergebnis ist: ${desiredOutcome}.\n\n1. Zielbild und Entscheidungsfrage schärfen\n2. Ausgangslage, Datenbasis und offene Annahmen\n3. Risiken, Einwände und Alternativen\n4. Entscheidung, Maßnahmen und Follow-up\n5. Abschluss und Kommunikationslinie\n\nBitte ergänzt vorab, welche Punkte aus eurer Sicht für die Entscheidung zwingend geklärt werden müssen.\n\nViele Grüße`,
+    comparison: {
+      covered: [
+        "Ziel und Ausgangslage wurden voraussichtlich behandelt, wenn sie im Transkript ausdrücklich erwähnt werden.",
+        "Risiken wurden adressiert, sofern Einwände, Budget, Ressourcen oder Timing diskutiert wurden."
+      ],
+      skipped: [
+        "Entscheidungsrechte und finale Verantwortlichkeit sind häufig nicht klar genug ausgesprochen.",
+        "Kommunikationslinie und Ergebnisformulierung werden oft am Ende vergessen."
+      ],
+      newTopics: [
+        "Ungeplante Ressourcenkonflikte",
+        "Zusätzliche Abhängigkeiten zu anderen Projekten"
+      ],
+      decisions: [
+        "Entscheidung oder Vertagung sollte je Agenda-Punkt dokumentiert werden.",
+        "Offene Annahmen brauchen Owner und Termin."
+      ],
+      followUps: [
+        "Agenda-Punkte ohne Ergebnis in den nächsten Termin übernehmen.",
+        "Abweichungen zwischen Agenda und tatsächlichem Verlauf im Ergebnisprotokoll markieren."
+      ]
+    }
   };
 }
 

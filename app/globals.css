@@ -1055,6 +1055,78 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.agenda-intro {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+.agenda-flow-card ol {
+  color: #344054;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.agenda-flow-card li {
+  margin: 6px 0;
+}
+
+.agenda-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agenda-table {
+  display: grid;
+  gap: 12px;
+}
+
+.agenda-item {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.95fr);
+  padding: 16px;
+}
+
+.agenda-item h3 {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.agenda-item p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.agenda-item dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 0.65fr) minmax(0, 0.45fr) minmax(0, 1fr);
+  margin: 0;
+}
+
+.agenda-item dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.agenda-item dd {
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .transcript-analysis-hero {
   display: grid;
   gap: 14px;
@@ -1296,6 +1368,7 @@ h3 {
   .grid--two,
   .form-grid,
   .result-grid,
+  .agenda-intro,
   .transcript-analysis-hero,
   .transcription-layout,
   .scenario-grid,
@@ -1340,6 +1413,14 @@ h3 {
   }
 
   .action-plan-item {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-item {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-item dl {
     grid-template-columns: 1fr;
   }
 
