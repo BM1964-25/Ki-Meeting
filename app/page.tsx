@@ -277,6 +277,9 @@ export default function Home() {
   const [stakeholder, setStakeholder] = useState<StakeholderAnalysisResult | null>(null);
   const [patternsText, setPatternsText] = useState("");
   const [patterns, setPatterns] = useState<MeetingPatternsResult | null>(null);
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [anthropicConnectionState, setAnthropicConnectionState] = useState<"disconnected" | "connected" | "error">("disconnected");
+  const [anthropicStatusText, setAnthropicStatusText] = useState("Nicht verbunden");
 
   const dashboardStats = useMemo(
     () => ({
@@ -932,6 +935,24 @@ export default function Home() {
     } finally {
       setLoadingAction(null);
     }
+  }
+
+  function connectAnthropic() {
+    const trimmedKey = anthropicApiKey.trim();
+    if (!trimmedKey) {
+      setAnthropicConnectionState("error");
+      setAnthropicStatusText("Bitte zuerst einen Anthropic API-Schlüssel eingeben.");
+      return;
+    }
+
+    setAnthropicConnectionState("connected");
+    setAnthropicStatusText("Verbindung ok");
+  }
+
+  function disconnectAnthropic() {
+    setAnthropicApiKey("");
+    setAnthropicConnectionState("disconnected");
+    setAnthropicStatusText("Nicht verbunden");
   }
 
   return (
@@ -1872,11 +1893,43 @@ export default function Home() {
               <h2>Einstellungen</h2>
               <div className="setting-row">
                 <span>KI-Anbieter</span>
-                <select defaultValue="mock"><option value="mock">Mock-Service</option><option>OpenAI</option><option>Claude</option><option>Anderer Anbieter</option></select>
+                <select defaultValue="anthropic"><option value="mock">Mock-Service</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option>Anderer Anbieter</option></select>
               </div>
-              <div className="setting-row">
-                <span>API-Key</span>
-                <input placeholder="Noch nicht verbunden" type="password" />
+              <div className="settings-connection-panel">
+                <div>
+                  <h3>Anthropic API-Verbindung</h3>
+                  <p>
+                    Der Schlüssel wird aktuell nur lokal im Eingabefeld geprüft. Es wird noch keine Anfrage
+                    an Anthropic gesendet.
+                  </p>
+                </div>
+                <div className="setting-row">
+                  <span>Anthropic API-Schlüssel</span>
+                  <input
+                    autoComplete="off"
+                    placeholder="sk-ant-..."
+                    type="password"
+                    value={anthropicApiKey}
+                    onChange={(event) => {
+                      setAnthropicApiKey(event.target.value);
+                      if (anthropicConnectionState !== "disconnected") {
+                        setAnthropicConnectionState("disconnected");
+                        setAnthropicStatusText("Nicht verbunden");
+                      }
+                    }}
+                  />
+                </div>
+                <div className="settings-actions">
+                  <button className="primary-button" onClick={connectAnthropic} type="button">
+                    <Sparkles size={17} /> Verbinden
+                  </button>
+                  <button className="secondary-button" onClick={disconnectAnthropic} type="button">
+                    <Square size={16} /> Trennen
+                  </button>
+                  <span className={`connection-state connection-state--${anthropicConnectionState}`}>
+                    {anthropicStatusText}
+                  </span>
+                </div>
               </div>
               <div className="setting-row">
                 <span>Datenschutzmodus</span>
