@@ -13,7 +13,6 @@ import {
   Gauge,
   MessageSquareText,
   PlayCircle,
-  Square,
   Settings,
   ShieldQuestion,
   Sparkles,
@@ -501,7 +500,7 @@ export default function Home() {
         {activeArea === "record" && (
           <section className="section">
             <PrivacyNotice />
-            <div className="grid grid--two">
+            <div className="audio-workflow">
               <article className="card">
                 <h2>Meeting live aufnehmen</h2>
                 <p className="lead">
@@ -513,16 +512,6 @@ export default function Home() {
                 </p>
                 <div className="recording-panel">
                   <div className={`recorder-composer recorder-composer--${recordingState}`}>
-                    <button
-                      aria-label="Neue Aufnahme starten"
-                      className="recorder-start-button"
-                      disabled={recordingState === "requesting" || recordingState === "recording" || recordingState === "paused"}
-                      onClick={startRecording}
-                      type="button"
-                    >
-                      <Mic size={16} aria-hidden="true" />
-                      {recordingState === "requesting" ? "Freigabe ..." : "Start"}
-                    </button>
                     <div className="recorder-waveform" aria-label="Live-Wellenform">
                       {waveformBars.map((height, index) => (
                         <span
@@ -533,24 +522,44 @@ export default function Home() {
                       ))}
                     </div>
                     <span className="recorder-timer">{formatTimer(recordingSeconds)}</span>
-                    <button
-                      aria-label={recordingState === "paused" ? "Aufnahme fortsetzen" : "Aufnahme pausieren"}
-                      className="recorder-text-button"
-                      disabled={!recorder}
-                      onClick={recordingState === "paused" ? resumeRecording : pauseRecording}
-                      type="button"
-                    >
-                      {recordingState === "paused" ? "Fortsetzen" : "Pause"}
-                    </button>
-                    <button
-                      aria-label={recordingState === "recording" ? "Aufnahme stoppen" : "Aufnahme pausiert oder nicht gestartet"}
-                      className="recorder-icon-button recorder-icon-button--stop"
-                      disabled={!recorder}
-                      onClick={stopRecording}
-                      type="button"
-                    >
-                      <Square size={16} aria-hidden="true" />
-                    </button>
+                    <div className="recorder-controls" aria-label="Aufnahmesteuerung">
+                      <button
+                        aria-label="Aufnahme starten"
+                        className="recorder-control-button recorder-control-button--start"
+                        disabled={recordingState === "requesting" || recordingState === "recording" || recordingState === "paused"}
+                        onClick={startRecording}
+                        type="button"
+                      >
+                        Start
+                      </button>
+                      <button
+                        aria-label="Aufnahme pausieren"
+                        className="recorder-control-button"
+                        disabled={!recorder || recordingState !== "recording"}
+                        onClick={pauseRecording}
+                        type="button"
+                      >
+                        Pause
+                      </button>
+                      <button
+                        aria-label="Aufnahme fortfahren"
+                        className="recorder-control-button"
+                        disabled={!recorder || recordingState !== "paused"}
+                        onClick={resumeRecording}
+                        type="button"
+                      >
+                        Fortfahren
+                      </button>
+                      <button
+                        aria-label="Aufnahme stoppen"
+                        className="recorder-control-button recorder-control-button--stop"
+                        disabled={!recorder}
+                        onClick={stopRecording}
+                        type="button"
+                      >
+                        Stop
+                      </button>
+                    </div>
                     <button
                       aria-label="Aufnahme transkribieren"
                       className="recorder-icon-button recorder-icon-button--send"
@@ -562,7 +571,7 @@ export default function Home() {
                     </button>
                   </div>
                   <p className="recorder-helper">
-                    Start beginnt die Aufnahme. Stop beendet sie und legt die Datei temporär im Browser ab.
+                    Start beginnt die Aufnahme. Pause unterbricht sie, Fortfahren setzt sie fort, Stop beendet sie.
                     Der Pfeil transkribiert erst, wenn eine Aufnahme vorhanden ist.
                   </p>
                   <div className="recording-header">
