@@ -248,6 +248,7 @@ const chunkLengthOptions = [1, 5, 10] as const;
 const MEETING_ARCHIVE_STORAGE_KEY = "meeting-intelligence-ki.archives.v1";
 const AI_SETTINGS_STORAGE_KEY = "meeting-intelligence-ki.ai-settings.v1";
 const MEETING_SUGGESTIONS_STORAGE_KEY = "meeting-intelligence-ki.suggestions.v1";
+const MEETING_PROJECT_SUGGESTIONS_STORAGE_KEY = "meeting-intelligence-ki.project-suggestions.v1";
 const OPENAI_AUDIO_UPLOAD_LIMIT_MB = 25;
 
 type AiProvider = "anthropic" | "openai";
@@ -294,6 +295,7 @@ type StoredAiSettings = {
 
 type MeetingSuggestionKey = "titles" | "projects" | "goals" | "participants" | "outcomes" | "criticalTopics" | "ownPositions" | "durations";
 type MeetingSuggestions = Record<MeetingSuggestionKey, string[]>;
+type ProjectMeetingSuggestions = Record<string, MeetingSuggestions>;
 
 const meetingSuggestionLabels: Record<MeetingSuggestionKey, string> = {
   titles: "Meeting-Titel",
@@ -351,6 +353,11 @@ const normalizeSuggestionValues = (values: Array<string | undefined>) =>
     .filter((value): value is string => Boolean(value && value.length >= 3))
     .filter((value, index, list) => list.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index)
     .slice(0, 12);
+
+const normalizeProjectKey = (project: string) => project.trim().toLowerCase();
+
+const mergeSuggestionValues = (primary: string[], secondary: string[]) =>
+  normalizeSuggestionValues([...primary, ...secondary]);
 
 const createSilentWaveform = () =>
   Array.from({ length: WAVEFORM_BAR_COUNT }, () => FLAT_WAVEFORM_HEIGHT);
@@ -418,6 +425,35 @@ function loadMeetingSuggestionsFromStorage(): MeetingSuggestions {
     ) as MeetingSuggestions;
   } catch {
     return createEmptyMeetingSuggestions();
+  }
+}
+
+function loadProjectMeetingSuggestionsFromStorage(): ProjectMeetingSuggestions {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedSuggestions = window.localStorage.getItem(MEETING_PROJECT_SUGGESTIONS_STORAGE_KEY);
+    if (!storedSuggestions) {
+      return {};
+    }
+
+    const parsedSuggestions = JSON.parse(storedSuggestions) as Record<string, Partial<MeetingSuggestions>>;
+    const emptySuggestions = createEmptyMeetingSuggestions();
+    return Object.fromEntries(
+      Object.entries(parsedSuggestions).map(([project, suggestions]) => [
+        normalizeProjectKey(project),
+        Object.fromEntries(
+          Object.keys(emptySuggestions).map((key) => {
+            const suggestionKey = key as MeetingSuggestionKey;
+            return [suggestionKey, Array.isArray(suggestions[suggestionKey]) ? normalizeSuggestionValues(suggestions[suggestionKey]!) : []];
+          })
+        ) as MeetingSuggestions
+      ])
+    );
+  } catch {
+    return {};
   }
 }
 
@@ -588,6 +624,7 @@ export default function Home() {
   const [meetingMetadata, setMeetingMetadata] = useState<MeetingMetadataForm>(createInitialMeetingMetadata);
   const [meetingStartDraft, setMeetingStartDraft] = useState<MeetingStartDraft>(createInitialMeetingStartDraft);
   const [meetingSuggestions, setMeetingSuggestions] = useState<MeetingSuggestions>(loadMeetingSuggestionsFromStorage);
+  const [projectMeetingSuggestions, setProjectMeetingSuggestions] = useState<ProjectMeetingSuggestions>(loadProjectMeetingSuggestionsFromStorage);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "requesting" | "recording" | "paused" | "ready">("idle");
   const [microphoneStatus, setMicrophoneStatus] = useState<"unbekannt" | "angefragt" | "erlaubt" | "blockiert" | "nicht verfügbar">("unbekannt");
@@ -842,7 +879,13 @@ export default function Home() {
       window.localStorage.setItem(MEETING_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
     }
   }, []);
-  const rememberMeetingSuggestionValues = useCallback((values: Partial<Record<MeetingSuggestionKey, string | string[]>>) => {
+  const persistProjectMeetingSuggestions = useCallback((nextSuggestions: ProjectMeetingSuggestions) => {
+    setProjectMeetingSuggestions(nextSuggestions);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MEETING_PROJECT_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
+    }
+  }, []);
+  const rememberMeetingSuggestionValues = useCallback((values: Partial<Record<MeetingSuggestionKey, string | string[]>>, projectName = "") => {
     setMeetingSuggestions((currentSuggestions) => {
       const nextSuggestions = { ...currentSuggestions };
 
@@ -859,6 +902,40 @@ export default function Home() {
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(MEETING_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
+      }
+
+      return nextSuggestions;
+    });
+    const projectKey = normalizeProjectKey(projectName);
+    if (!projectKey) {
+      return;
+    }
+
+    setProjectMeetingSuggestions((currentSuggestions) => {
+      const currentProjectSuggestions = currentSuggestions[projectKey] ?? createEmptyMeetingSuggestions();
+      const nextProjectSuggestions = { ...currentProjectSuggestions };
+
+      (Object.entries(values) as Array<[MeetingSuggestionKey, string | string[] | undefined]>).forEach(([key, rawValue]) => {
+        if (key === "projects") {
+          return;
+        }
+
+        const valuesToStore = normalizeSuggestionValues(Array.isArray(rawValue) ? rawValue : [rawValue]);
+        if (valuesToStore.length === 0) {
+          return;
+        }
+
+        const existing = nextProjectSuggestions[key].filter((item) => !valuesToStore.some((value) => value.toLowerCase() === item.toLowerCase()));
+        nextProjectSuggestions[key] = [...valuesToStore, ...existing].slice(0, 12);
+      });
+
+      const nextSuggestions = {
+        ...currentSuggestions,
+        [projectKey]: nextProjectSuggestions
+      };
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(MEETING_PROJECT_SUGGESTIONS_STORAGE_KEY, JSON.stringify(nextSuggestions));
       }
 
       return nextSuggestions;
@@ -888,15 +965,74 @@ export default function Home() {
       [key]: nextValues
     });
   }, [deleteMeetingSuggestion, meetingSuggestions, persistMeetingSuggestions]);
+  const deleteProjectMeetingSuggestion = useCallback((project: string, key: MeetingSuggestionKey, value: string) => {
+    const projectKey = normalizeProjectKey(project);
+    const currentSuggestions = projectMeetingSuggestions[projectKey];
+    if (!currentSuggestions) {
+      return;
+    }
+
+    const nextProjectValues = {
+      ...currentSuggestions,
+      [key]: currentSuggestions[key].filter((item) => item !== value)
+    };
+    const nextSuggestions = {
+      ...projectMeetingSuggestions,
+      [projectKey]: nextProjectValues
+    };
+    persistProjectMeetingSuggestions(nextSuggestions);
+  }, [persistProjectMeetingSuggestions, projectMeetingSuggestions]);
+  const updateProjectMeetingSuggestion = useCallback((project: string, key: MeetingSuggestionKey, oldValue: string, newValue: string) => {
+    const projectKey = normalizeProjectKey(project);
+    const currentSuggestions = projectMeetingSuggestions[projectKey];
+    if (!currentSuggestions) {
+      return;
+    }
+
+    const trimmedValue = newValue.trim();
+    if (trimmedValue.length < 3) {
+      deleteProjectMeetingSuggestion(projectKey, key, oldValue);
+      return;
+    }
+
+    persistProjectMeetingSuggestions({
+      ...projectMeetingSuggestions,
+      [projectKey]: {
+        ...currentSuggestions,
+        [key]: normalizeSuggestionValues(currentSuggestions[key].map((item) => (item === oldValue ? trimmedValue : item)))
+      }
+    });
+  }, [deleteProjectMeetingSuggestion, persistProjectMeetingSuggestions, projectMeetingSuggestions]);
   const resetMeetingSuggestions = useCallback(() => {
     persistMeetingSuggestions(createEmptyMeetingSuggestions());
+    persistProjectMeetingSuggestions({});
     setAiSettingsStatus("Gespeicherte Vorschläge wurden lokal zurückgesetzt.");
-  }, [persistMeetingSuggestions]);
+  }, [persistMeetingSuggestions, persistProjectMeetingSuggestions]);
   const meetingSuggestionTotal = useMemo(
-    () => Object.values(meetingSuggestions).reduce((total, values) => total + values.length, 0),
-    [meetingSuggestions]
+    () => Object.values(meetingSuggestions).reduce((total, values) => total + values.length, 0)
+      + Object.values(projectMeetingSuggestions).reduce((projectTotal, suggestions) => projectTotal + Object.values(suggestions).reduce((total, values) => total + values.length, 0), 0),
+    [meetingSuggestions, projectMeetingSuggestions]
+  );
+  const activeProjectKey = normalizeProjectKey(meetingStartDraft.project || meetingMetadata.project);
+  const activeProjectSuggestions = activeProjectKey ? projectMeetingSuggestions[activeProjectKey] : undefined;
+  const getSuggestionsForField = useCallback((key: MeetingSuggestionKey) => (
+    key === "projects"
+      ? meetingSuggestions.projects
+      : mergeSuggestionValues(activeProjectSuggestions?.[key] ?? [], meetingSuggestions[key])
+  ), [activeProjectSuggestions, meetingSuggestions]);
+  const projectSuggestionEntries = useMemo(
+    () => Object.entries(projectMeetingSuggestions)
+      .map(([project, suggestions]) => ({
+        project,
+        total: Object.values(suggestions).reduce((total, values) => total + values.length, 0),
+        suggestions
+      }))
+      .filter((entry) => entry.total > 0)
+      .sort((first, second) => first.project.localeCompare(second.project, "de")),
+    [projectMeetingSuggestions]
   );
   const rememberCurrentMeetingSuggestions = useCallback(() => {
+    const projectName = meetingStartDraft.project || meetingMetadata.project;
     rememberMeetingSuggestionValues({
       titles: [meetingStartDraft.title, meetingMetadata.title, agendaInput.title, preparationInput.title],
       projects: [meetingStartDraft.project, meetingMetadata.project],
@@ -906,7 +1042,7 @@ export default function Home() {
       criticalTopics: [meetingStartDraft.criticalTopics, preparationInput.criticalTopics],
       ownPositions: [meetingStartDraft.ownPosition, preparationInput.ownPosition],
       durations: [meetingStartDraft.duration, agendaInput.duration]
-    });
+    }, projectName);
   }, [agendaInput, meetingMetadata, meetingStartDraft, preparationInput, rememberMeetingSuggestionValues]);
   const qualityReview: AiQualityReview = useMemo(() => {
     const missingInputs = [
@@ -1633,7 +1769,7 @@ export default function Home() {
       criticalTopics: archive.preparation.input.criticalTopics,
       ownPositions: archive.preparation.input.ownPosition,
       durations: archive.agenda.input.duration
-    });
+    }, archive.metadata.project);
     const nextArchives = [
       archive,
       ...savedArchives.filter((savedArchive) => savedArchive.id !== archive.id)
@@ -2573,9 +2709,9 @@ export default function Home() {
                     ))}
                   </select>
                 </Field>
-                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.title} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, title: value })} />
-                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={meetingSuggestions.projects} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.project} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, project: value })} />
-                <SuggestedField label="Dauer" suggestionKey="durations" suggestions={meetingSuggestions.durations} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, duration: value })} />
+                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={getSuggestionsForField("titles")} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.title} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, title: value })} />
+                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={getSuggestionsForField("projects")} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingStartDraft.project} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, project: value })} />
+                <SuggestedField label="Dauer" suggestionKey="durations" suggestions={getSuggestionsForField("durations")} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={meetingStartDraft.duration} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, duration: value })} />
                 <section className="workflow-type-card">
                   <span>{meetingStartTemplate.label}</span>
                   <h3>Zusatzfragen für diesen Meeting-Typ</h3>
@@ -2589,11 +2725,11 @@ export default function Home() {
                 <Field label="Anlass">
                   <textarea value={meetingStartDraft.context} onChange={(event) => setMeetingStartDraft({ ...meetingStartDraft, context: event.target.value })} />
                 </Field>
-                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.goal} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, goal: value })} />
-                <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.participants} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, participants: value })} />
-                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.desiredOutcome} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, desiredOutcome: value })} />
-                <SuggestedField label="Kritische Themen / Konflikte" suggestionKey="criticalTopics" suggestions={meetingSuggestions.criticalTopics} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.criticalTopics} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, criticalTopics: value })} />
-                <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={meetingSuggestions.ownPositions} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.ownPosition} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: value })} />
+                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={getSuggestionsForField("goals")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.goal} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, goal: value })} />
+                <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={getSuggestionsForField("participants")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.participants} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, participants: value })} />
+                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={getSuggestionsForField("outcomes")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.desiredOutcome} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, desiredOutcome: value })} />
+                <SuggestedField label="Kritische Themen / Konflikte" suggestionKey="criticalTopics" suggestions={getSuggestionsForField("criticalTopics")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.criticalTopics} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, criticalTopics: value })} />
+                <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={getSuggestionsForField("ownPositions")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingStartDraft.ownPosition} onChange={(value) => setMeetingStartDraft({ ...meetingStartDraft, ownPosition: value })} />
                 <Field label={`Zusatzantworten: ${meetingStartTemplate.label}`}>
                   <textarea
                     placeholder={meetingStartTemplate.prompts.join("\n")}
@@ -2653,8 +2789,8 @@ export default function Home() {
                 <span className="meeting-status-pill">{meetingMetadata.status}</span>
               </div>
               <div className="meeting-file-form">
-                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingMetadata.title} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, title: value })} />
-                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={meetingSuggestions.projects} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. CRM-Rollout, Strategie 2026, Kunde A" value={meetingMetadata.project} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, project: value })} />
+                <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={getSuggestionsForField("titles")} onDeleteSuggestion={deleteMeetingSuggestion} value={meetingMetadata.title} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, title: value })} />
+                <SuggestedField label="Projekt / Mandat" suggestionKey="projects" suggestions={getSuggestionsForField("projects")} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. CRM-Rollout, Strategie 2026, Kunde A" value={meetingMetadata.project} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, project: value })} />
                 <Field label="Datum">
                   <input type="date" value={meetingMetadata.date} onChange={(event) => setMeetingMetadata({ ...meetingMetadata, date: event.target.value })} />
                 </Field>
@@ -2667,9 +2803,9 @@ export default function Home() {
                     <option value="abgeschlossen">abgeschlossen</option>
                   </select>
                 </Field>
-                <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.participants} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, participants: value })} />
-                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.goal} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, goal: value })} />
-                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.desiredOutcome} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, desiredOutcome: value })} />
+                <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={getSuggestionsForField("participants")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.participants} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, participants: value })} />
+                <SuggestedField label="Ziel" suggestionKey="goals" suggestions={getSuggestionsForField("goals")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.goal} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, goal: value })} />
+                <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={getSuggestionsForField("outcomes")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={meetingMetadata.desiredOutcome} onChange={(value) => setMeetingMetadata({ ...meetingMetadata, desiredOutcome: value })} />
               </div>
               <div className="button-row">
                 <button className="primary-button" onClick={saveCurrentMeetingInBrowser} type="button">
@@ -3877,11 +4013,11 @@ export default function Home() {
             </div>
 
             <form className="card form-grid" onSubmit={handleAgenda}>
-              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={agendaInput.title} onChange={(value) => setAgendaInput({ ...agendaInput, title: value })} />
-              <SuggestedField label="Dauer" suggestionKey="durations" suggestions={meetingSuggestions.durations} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={agendaInput.duration} onChange={(value) => setAgendaInput({ ...agendaInput, duration: value })} />
-              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.meetingGoal} onChange={(value) => setAgendaInput({ ...agendaInput, meetingGoal: value })} />
-              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.desiredOutcome} onChange={(value) => setAgendaInput({ ...agendaInput, desiredOutcome: value })} />
-              <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.participants} onChange={(value) => setAgendaInput({ ...agendaInput, participants: value })} />
+              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={getSuggestionsForField("titles")} onDeleteSuggestion={deleteMeetingSuggestion} value={agendaInput.title} onChange={(value) => setAgendaInput({ ...agendaInput, title: value })} />
+              <SuggestedField label="Dauer" suggestionKey="durations" suggestions={getSuggestionsForField("durations")} onDeleteSuggestion={deleteMeetingSuggestion} placeholder="z. B. 60 Minuten" value={agendaInput.duration} onChange={(value) => setAgendaInput({ ...agendaInput, duration: value })} />
+              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={getSuggestionsForField("goals")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.meetingGoal} onChange={(value) => setAgendaInput({ ...agendaInput, meetingGoal: value })} />
+              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={getSuggestionsForField("outcomes")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.desiredOutcome} onChange={(value) => setAgendaInput({ ...agendaInput, desiredOutcome: value })} />
+              <SuggestedField label="Teilnehmer und Rollen" suggestionKey="participants" suggestions={getSuggestionsForField("participants")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={agendaInput.participants} onChange={(value) => setAgendaInput({ ...agendaInput, participants: value })} />
               <Field label="Neue Agenda-Idee">
                 <textarea placeholder="Agenda-Punkte grob skizzieren, falls noch keine fertige Agenda existiert." value={agendaInput.agendaText} onChange={(event) => setAgendaInput({ ...agendaInput, agendaText: event.target.value })} />
               </Field>
@@ -3977,15 +4113,15 @@ export default function Home() {
           <section className="section">
             <PrivacyNotice />
             <form className="card form-grid" onSubmit={handlePreparation}>
-              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={meetingSuggestions.titles} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.title} onChange={(value) => setPreparationInput({ ...preparationInput, title: value })} />
-              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={meetingSuggestions.goals} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.goal} onChange={(value) => setPreparationInput({ ...preparationInput, goal: value })} />
-              <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={meetingSuggestions.participants} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.participants} onChange={(value) => setPreparationInput({ ...preparationInput, participants: value })} />
+              <SuggestedField label="Meeting-Titel" suggestionKey="titles" suggestions={getSuggestionsForField("titles")} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.title} onChange={(value) => setPreparationInput({ ...preparationInput, title: value })} />
+              <SuggestedField label="Ziel des Meetings" suggestionKey="goals" suggestions={getSuggestionsForField("goals")} onDeleteSuggestion={deleteMeetingSuggestion} value={preparationInput.goal} onChange={(value) => setPreparationInput({ ...preparationInput, goal: value })} />
+              <SuggestedField label="Teilnehmer" suggestionKey="participants" suggestions={getSuggestionsForField("participants")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.participants} onChange={(value) => setPreparationInput({ ...preparationInput, participants: value })} />
               <Field label="Rollen der Teilnehmer">
                 <textarea value={preparationInput.roles} onChange={(event) => setPreparationInput({ ...preparationInput, roles: event.target.value })} />
               </Field>
-              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={meetingSuggestions.outcomes} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.desiredOutcome} onChange={(value) => setPreparationInput({ ...preparationInput, desiredOutcome: value })} />
-              <SuggestedField label="Kritische Themen" suggestionKey="criticalTopics" suggestions={meetingSuggestions.criticalTopics} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.criticalTopics} onChange={(value) => setPreparationInput({ ...preparationInput, criticalTopics: value })} />
-              <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={meetingSuggestions.ownPositions} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.ownPosition} onChange={(value) => setPreparationInput({ ...preparationInput, ownPosition: value })} />
+              <SuggestedField label="Gewünschtes Ergebnis" suggestionKey="outcomes" suggestions={getSuggestionsForField("outcomes")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.desiredOutcome} onChange={(value) => setPreparationInput({ ...preparationInput, desiredOutcome: value })} />
+              <SuggestedField label="Kritische Themen" suggestionKey="criticalTopics" suggestions={getSuggestionsForField("criticalTopics")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.criticalTopics} onChange={(value) => setPreparationInput({ ...preparationInput, criticalTopics: value })} />
+              <SuggestedField label="Eigene Position" suggestionKey="ownPositions" suggestions={getSuggestionsForField("ownPositions")} onDeleteSuggestion={deleteMeetingSuggestion} multiline value={preparationInput.ownPosition} onChange={(value) => setPreparationInput({ ...preparationInput, ownPosition: value })} />
               <div className="form-actions">
                 <button className="primary-button" type="submit"><Sparkles size={17} /> Vorbereitung erzeugen</button>
               </div>
@@ -4386,36 +4522,88 @@ export default function Home() {
                 {meetingSuggestionTotal === 0 ? (
                   <p className="empty-state">Noch keine Vorschläge gespeichert. Sie entstehen automatisch, sobald Meeting-Daten verwendet oder Akten gespeichert werden.</p>
                 ) : (
-                  <div className="suggestion-admin-grid">
-                    {(Object.entries(meetingSuggestionLabels) as Array<[MeetingSuggestionKey, string]>).map(([key, label]) => (
-                      <section className="suggestion-admin-group" key={key}>
-                        <div className="suggestion-admin-group__title">
-                          <span>{label}</span>
-                          <small>{meetingSuggestions[key].length}</small>
-                        </div>
-                        {meetingSuggestions[key].length === 0 ? (
-                          <p>Keine Einträge</p>
-                        ) : (
-                          <div className="suggestion-admin-list">
-                            {meetingSuggestions[key].map((suggestion) => (
-                              <div className="suggestion-admin-item" key={suggestion}>
-                                <input
-                                  defaultValue={suggestion}
-                                  onBlur={(event) => updateMeetingSuggestion(key, suggestion, event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.currentTarget.blur();
-                                    }
-                                  }}
-                                />
-                                <button aria-label={`${suggestion} löschen`} onClick={() => deleteMeetingSuggestion(key, suggestion)} type="button">Löschen</button>
+                  <>
+                    <div>
+                      <h4>Allgemeine Vorschläge</h4>
+                      <div className="suggestion-admin-grid">
+                        {(Object.entries(meetingSuggestionLabels) as Array<[MeetingSuggestionKey, string]>).map(([key, label]) => (
+                          <section className="suggestion-admin-group" key={key}>
+                            <div className="suggestion-admin-group__title">
+                              <span>{label}</span>
+                              <small>{meetingSuggestions[key].length}</small>
+                            </div>
+                            {meetingSuggestions[key].length === 0 ? (
+                              <p>Keine Einträge</p>
+                            ) : (
+                              <div className="suggestion-admin-list">
+                                {meetingSuggestions[key].map((suggestion) => (
+                                  <div className="suggestion-admin-item" key={suggestion}>
+                                    <input
+                                      defaultValue={suggestion}
+                                      onBlur={(event) => updateMeetingSuggestion(key, suggestion, event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.currentTarget.blur();
+                                        }
+                                      }}
+                                    />
+                                    <button aria-label={`${suggestion} löschen`} onClick={() => deleteMeetingSuggestion(key, suggestion)} type="button">Löschen</button>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    ))}
-                  </div>
+                            )}
+                          </section>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="project-suggestion-admin">
+                      <h4>Projektbezogene Vorschläge</h4>
+                      {projectSuggestionEntries.length === 0 ? (
+                        <p className="empty-state">Noch keine projektbezogenen Vorschläge gespeichert. Sie entstehen automatisch, sobald zu einem Projekt oder Mandat eine Akte gespeichert wird.</p>
+                      ) : (
+                        projectSuggestionEntries.map(({ project, suggestions, total }) => (
+                          <details className="project-suggestion-admin__project" key={project}>
+                            <summary>
+                              <span>{project}</span>
+                              <small>{total} Einträge</small>
+                            </summary>
+                            <div className="suggestion-admin-grid">
+                              {(Object.entries(meetingSuggestionLabels) as Array<[MeetingSuggestionKey, string]>)
+                                .filter(([key]) => key !== "projects")
+                                .map(([key, label]) => (
+                                  <section className="suggestion-admin-group" key={`${project}-${key}`}>
+                                    <div className="suggestion-admin-group__title">
+                                      <span>{label}</span>
+                                      <small>{suggestions[key].length}</small>
+                                    </div>
+                                    {suggestions[key].length === 0 ? (
+                                      <p>Keine Einträge</p>
+                                    ) : (
+                                      <div className="suggestion-admin-list">
+                                        {suggestions[key].map((suggestion) => (
+                                          <div className="suggestion-admin-item" key={`${project}-${key}-${suggestion}`}>
+                                            <input
+                                              defaultValue={suggestion}
+                                              onBlur={(event) => updateProjectMeetingSuggestion(project, key, suggestion, event.target.value)}
+                                              onKeyDown={(event) => {
+                                                if (event.key === "Enter") {
+                                                  event.currentTarget.blur();
+                                                }
+                                              }}
+                                            />
+                                            <button aria-label={`${suggestion} löschen`} onClick={() => deleteProjectMeetingSuggestion(project, key, suggestion)} type="button">Löschen</button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </section>
+                              ))}
+                            </div>
+                          </details>
+                        ))
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
               <div className="setting-row">
