@@ -72,8 +72,32 @@ button {
 }
 
 .brand__mark {
-  width: 42px;
-  height: 42px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  height: 46px;
+  overflow: hidden;
+  width: 46px;
+}
+
+.brand__mark img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.brand__text {
+  min-width: 0;
+}
+
+.brand__text strong,
+.brand__text span {
+  overflow-wrap: anywhere;
+}
+
+.nav-button__icon,
+.metric-card__icon {
   border-radius: 8px;
   background: var(--primary);
 }

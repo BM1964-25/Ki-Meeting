@@ -65,7 +65,7 @@ function createAiMeta(source: AiResultSource, model: string, fallback: boolean, 
 
 function buildJsonPrompt(task: string, input: unknown, mockResult: unknown) {
   return [
-    "Du bist Meeting Intelligence KI für professionelle Meeting-Arbeit.",
+    "Du bist SMART MEETING Navigator für professionelle Meeting-Arbeit.",
     "Antworte ausschließlich mit gültigem JSON, ohne Markdown und ohne Erläuterung.",
     "Nutze exakt die Struktur des Beispiel-JSON. Formuliere fachlich präzise auf Deutsch.",
     "",

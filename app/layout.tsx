@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Meeting Intelligence KI",
-  description: "Strategische Meeting-Vorbereitung, Analyse und Simulation"
+  title: "SMART MEETING Navigator",
+  description: "Strategische Meetingvorbereitung, KI-gestützte Analyse und Simulation für fundierte Entscheidungen"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

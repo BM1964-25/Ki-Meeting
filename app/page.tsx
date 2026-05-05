@@ -1,11 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
   BarChart3,
-  Brain,
   ClipboardCheck,
   Download,
   Eye,
@@ -1702,7 +1702,7 @@ export default function Home() {
       schemaVersion: 1,
       id: archiveId,
       savedAt,
-      appVersion: "Meeting Intelligence KI Arbeitsversion",
+      appVersion: "SMART MEETING Navigator Arbeitsversion",
       metadata: {
         title: currentMeetingTitle,
         project: meetingMetadata.project.trim(),
@@ -2540,11 +2540,11 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand__mark">
-            <Brain size={24} aria-hidden="true" />
+            <Image src="/smart-meeting-navigator-icon.jpeg" alt="" width={46} height={46} priority unoptimized />
           </div>
           <div className="brand__text">
-            <strong>Meeting Intelligence KI</strong>
-            <span>Strategie statt Mitschrift</span>
+            <strong>SMART MEETING Navigator</strong>
+            <span>Strategische Meetingvorbereitung, KI-gestützte Analyse und Simulation für fundierte Entscheidungen</span>
           </div>
         </div>
         <button
