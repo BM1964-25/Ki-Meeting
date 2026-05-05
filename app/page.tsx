@@ -2540,7 +2540,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand__mark">
-            <Image src="/smart-meeting-navigator-icon.jpeg" alt="" width={46} height={46} priority unoptimized />
+            <Image src="/smart-meeting-navigator-icon.png" alt="" width={46} height={46} priority unoptimized />
           </div>
           <div className="brand__text">
             <strong>SMART MEETING Navigator</strong>
